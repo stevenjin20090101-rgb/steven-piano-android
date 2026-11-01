@@ -198,7 +198,7 @@ class AdvertWatchTest {
     }
 
     @Test
-    fun `the power watch from adverts - a stuck key still trips, and adverts silent for 10 s read as unread`() = runTest {
+    fun `the power watch from adverts - adverts silent for 10 s read as unread, and a coil's 12 W mid-piece is logged, never CUT (v1_39 M76)`() = runTest {
         val s = Stack(this, plugOn = false)
         val keeper = s.keeper()
         keeper.wanted(RailKeeper.PLAY, true)
@@ -214,13 +214,15 @@ class AdvertWatchTest {
         assertEquals(RailPhase.Up, keeper.phase.value)
         assertTrue("said once in the log", s.logs.count { "no advert" in it } == 1)
 
+        assertTrue("the power reading lost, said", keeper.readingLost.value)
+
         s.advertising = true
-        val back = currentTime
         advanceTimeBy(25_000)
-        assertEquals(RailMessage.StuckKey(afterPiece = false), keeper.message.value)
-        assertFalse("CUT", s.plug.output())
-        assertEquals(1, s.host.due)
-        assertTrue("within about 20 s of the adverts' return", currentTime - back <= 25_000)
+        assertFalse("readings back", keeper.readingLost.value)
+        assertNull("the floor watch logs only since 1.39: no trip", keeper.message.value)
+        assertTrue("not CUT", s.plug.output())
+        assertEquals(0, s.host.due)
+        assertTrue(s.logs.any { "log only, no CUT" in it })
     }
 
     private companion object {

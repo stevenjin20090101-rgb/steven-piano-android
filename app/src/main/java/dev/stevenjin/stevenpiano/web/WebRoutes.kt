@@ -252,7 +252,17 @@ internal fun WebServer.routeTable(): List<Route> = listOf(
         backend.listenStop()
         noContent()
     },
-    Route(Method.POST, Regex("/api/keytest/start"), Access.WRITE, "/api/keytest/start") { call -> needsConfirm(call) ?: heard(call) { backend.keyTestStart(it) } },
+    Route(Method.POST, Regex("/api/keytest/start"), Access.WRITE, "/api/keytest/start") { call ->
+        backend.offHoursRefusal()?.let { return@Route refuse(409, "off-hours", it) }   // v1.39 — M76
+        needsConfirm(call) ?: heard(call) { backend.keyTestStart(it) }
+    },
+    // v1.39 — M76: the System page's Turn the piano on / off; on is refused outside the On hours (409 `off-hours`).
+    Route(Method.POST, Regex("/api/power"), Access.WRITE, "/api/power") { call ->
+        val body = call.body()
+        WebApi.onlyKeys(body, setOf("on"))
+        val on = body.opt("on") as? Boolean ?: throw ApiError(400, "field", "Give on: true or false.")
+        backend.setPianoOn(on)?.let { refuse(409, "off-hours", it) } ?: noContent()
+    },
     Route(Method.POST, Regex("/api/keytest/stop"), Access.WRITE, "/api/keytest/stop") {
         backend.keyTestStop()
         noContent()
@@ -651,10 +661,12 @@ private suspend fun WebServer.quietRefusal(): Response? {
 /**
  * Why a route that would start a piece is refused now: the safety check's lock, or a check due while the app is away
  * (v1.26 — M61: 409 `safety`, the tablet's words; the panel can't start a check, the microphone needs the tablet in
- * front), then a quiet time (409 `quiet`); null when the start may go.
+ * front), then (v1.39 — M76) the piano resting outside the On hours (409 `off-hours`, "The piano is off until 7:00": only
+ * a person at the tablet wakes it), then a quiet time (409 `quiet`); null when the start may go.
  */
 private suspend fun WebServer.startRefusal(): Response? {
     backend.safetyRefusal()?.let { return refuse(409, "safety", it) }
+    backend.offHoursRefusal()?.let { return refuse(409, "off-hours", it) }
     return quietRefusal()
 }
 

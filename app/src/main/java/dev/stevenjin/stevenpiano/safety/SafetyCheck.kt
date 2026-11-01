@@ -67,6 +67,9 @@ enum class Why {
     /** The piano offers no `restart` (no `!restartproto=1`: firmware before 2.1.1). */
     NOT_OFFERED,
 
+    /** v1.39 — M76: with the power plug the piano's controller is on it too: the repower is the restart. */
+    BY_REPOWER,
+
     /** `!ota=pending`: the firmware has not confirmed itself, and a restart would roll the update back. */
     OTA_PENDING,
 
@@ -209,6 +212,8 @@ data class CheckState(
     val outcome: SafetyOutcome? = null,
     /** The recovery was called for by the rail not coming up: the repower alone, no restart. */
     val railDown: Boolean = false,
+    /** v1.39 — M76: the power plug switches the piano's controller with the 24 V: its repower is the restart. */
+    val plug: Boolean = false,
 ) {
     /** The line of [step], if it has begun. */
     fun line(step: SafetyStep): StepLine? = lines.firstOrNull { it.step == step }
@@ -293,8 +298,8 @@ data class CheckState(
  */
 object SafetyCheck {
     /** Begins a check: the release first. [reported] false: the piano's console gave no dump on this connection. */
-    fun start(listens: Boolean, coils: Boolean, boards: Boolean, restart: Boolean, reported: Boolean = true): Step =
-        Step(CheckState(listens, coils, boards, restart, reported, lines = listOf(StepLine(SafetyStep.RELEASE, Mark.RUNNING))), Command.Release)
+    fun start(listens: Boolean, coils: Boolean, boards: Boolean, restart: Boolean, reported: Boolean = true, plug: Boolean = false): Step =
+        Step(CheckState(listens, coils, boards, restart, reported, lines = listOf(StepLine(SafetyStep.RELEASE, Mark.RUNNING)), plug = plug), Command.Release)
 
     /** What [event] (the last command's result, or an interruption) leads to from [state]. */
     fun on(state: CheckState, event: Event): Step {
@@ -418,6 +423,8 @@ object SafetyCheck {
     /** The restart and the repower, once a check: the restart only where the piano offers it. */
     private fun recover(state: CheckState): Step {
         val once = state.copy(recovered = true)
+        // v1.39 — M76: with the plug the console's `restart` is skipped: the repower restarts the controller too.
+        if (once.plug) return repower(once.put(SafetyStep.RESTART, Mark.SKIPPED, why = Why.BY_REPOWER))
         if (!once.restart) return repower(once.put(SafetyStep.RESTART, Mark.SKIPPED, why = Why.NOT_OFFERED))
         return Step(once.copy(phase = Phase.OTA).put(SafetyStep.RESTART, Mark.RUNNING), Command.Ask(OTA))
     }

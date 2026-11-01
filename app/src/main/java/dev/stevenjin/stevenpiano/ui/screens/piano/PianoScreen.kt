@@ -305,7 +305,9 @@ private fun PianoHub(
     val kind by vm.instrumentKind.collectAsStateWithLifecycle()
     val midi = kind == InstrumentKind.MidiPiano
     val instrument = InstrumentCopy.instrumentValue(kind, settings.midiOutName)
-    val linkWords = InstrumentCopy.linkWords(kind, link)
+    // v1.39 — M76: the piano off with its power plug says so, and how to wake it, rather than "Not connected".
+    val asleep by LocalContext.current.graph.pianoAsleep.collectAsStateWithLifecycle()
+    val linkWords = asleep ?: InstrumentCopy.linkWords(kind, link)
     // The System row's line (v1.18 — M50): the tablet read as the hub shows, then once a minute while it does.
     ReadWhileShown(SYSTEM_ROW_MS, vm::readSystem)
     val system by vm.system.collectAsStateWithLifecycle()

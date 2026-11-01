@@ -925,6 +925,10 @@ class AppWebBackend(
 
     override suspend fun safetyRefusal(): String? = onMain { graph.safety.refusal() }
 
+    override suspend fun offHoursRefusal(): String? = onMain { graph.offHoursRefusal() }   // v1.39 — M76
+
+    override suspend fun setPianoOn(on: Boolean): String? = onMain { graph.setPianoOnFromAfar(on) }
+
     override suspend fun quiet(): WebQuiet = WebQuiet(graph.quietStore.sections(), graph.quiet.now())
 
     /** Every section, checked by the route; kept in one transaction and the alarm planned again (the gate follows the table). */

@@ -221,7 +221,7 @@ class WebApiTest {
         assertEquals(setOf("player", "link", "instruments", "piano", "import", "requests", "web", "monochrome", "albumBackdrop", "studio", "display", "quiet", "listen", "keytest", "safety", "power"), json.keys().asSequence().toSet())
         // The 24 V power plug (v1.26 — M62): its little part, nothing of it without a plug; Now playing's "Waking the piano…".
         val unplugged = json.getJSONObject("power")
-        assertEquals(setOf("paired", "on", "rail", "waking", "message", "attention"), unplugged.keys().asSequence().toSet())
+        assertEquals(setOf("paired", "on", "rail", "waking", "message", "attention", "now", "peak"), unplugged.keys().asSequence().toSet())
         assertFalse(unplugged.getBoolean("paired") || unplugged.getBoolean("waking") || unplugged.getBoolean("attention"))
         assertEquals("off", unplugged.getString("rail"))
         assertTrue(unplugged.isNull("message"))
@@ -406,11 +406,11 @@ class WebApiTest {
         // The 24 V power plug (v1.26 — M62): every key, none paired, nothing known.
         val power = bare.getJSONObject("power")
         assertEquals(
-            setOf("paired", "on", "rail", "waking", "output", "watts", "timerEndsAt", "answered", "total", "message", "attention", "welded", "guestEndsAt"),
+            setOf("paired", "on", "rail", "waking", "output", "watts", "timerEndsAt", "answered", "total", "message", "attention", "welded", "guestEndsAt", "asleep", "manualEndsAt"),
             keys(power),
         )
         assertFalse(power.getBoolean("paired") || power.getBoolean("welded"))
-        for (key in listOf("output", "watts", "timerEndsAt", "answered", "total", "message", "guestEndsAt")) assertTrue("$key: unknown is null", power.isNull(key))
+        for (key in listOf("output", "watts", "timerEndsAt", "answered", "total", "message", "guestEndsAt", "asleep", "manualEndsAt")) assertTrue("$key: unknown is null", power.isNull(key))
         val plugged = WebApi.system(
             WebSystem(
                 at = 5,

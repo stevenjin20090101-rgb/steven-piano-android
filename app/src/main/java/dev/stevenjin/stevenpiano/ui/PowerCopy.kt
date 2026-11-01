@@ -10,6 +10,7 @@
 package dev.stevenjin.stevenpiano.ui
 
 import dev.stevenjin.stevenpiano.power.FoundPlug
+import dev.stevenjin.stevenpiano.power.OnHours
 import dev.stevenjin.stevenpiano.power.PairState
 import dev.stevenjin.stevenpiano.power.PairStep
 import dev.stevenjin.stevenpiano.power.Peak
@@ -46,10 +47,6 @@ object PowerCopy {
     const val SETTINGS_PUT_BACK = "The power plug's settings had been changed: put back"
     const val OK = "OK"
 
-    /** The power watch (v1.30 — M67): a key on, seen in the 24 V's draw while a piece played, or in the check after it. */
-    const val STUCK_KEY = "A key stayed on — 24 V cut"
-    const val STUCK_AFTER_PIECE = "A key stayed on after the piece — 24 V cut"
-
     /** The power watch (v1.30 — M67): "The 24 V draws 36 W with nothing playing — 24 V cut", at rail-up. */
     fun overdraw(watts: Int): String = "The 24 V draws $watts W with nothing playing — 24 V cut"
 
@@ -70,10 +67,53 @@ object PowerCopy {
         is RailMessage.TrunkFault -> trunk(message.answered, message.total, message.cut)
         RailMessage.SwitchedOn -> SWITCHED_ON
         RailMessage.SettingsPutBack -> SETTINGS_PUT_BACK
-        is RailMessage.StuckKey -> if (message.afterPiece) STUCK_AFTER_PIECE else STUCK_KEY
         is RailMessage.Overdraw -> overdraw(message.watts)
         is RailMessage.AboveUsual -> aboveUsual(message.watts)
+        is RailMessage.BoardOn -> if (message.playing || message.idle == null) {
+            "24 V cut: a board stayed on, ${message.above} W more than the notes explain"
+        } else {
+            "24 V cut: a board stayed on, ${message.above} W more than the piano's idle (${message.idle} W)"
+        }
+        is RailMessage.CoilOn -> "24 V cut: a key stayed on, ${message.above} W more than the piano's idle (${message.idle} W) for ${message.seconds} s"
+        is RailMessage.BoardLost ->
+            "24 V cut: the piano lost contact with a board" + (if (message.afterPiece) " after the piece" else "") + " (I²C errors ${message.before} → ${message.after})"
+        is RailMessage.AfterPiece -> "24 V cut: ${message.above} W more than the piano's idle (${message.idle} W) after the piece"
+        is RailMessage.KeysOn -> "24 V cut: the piano says ${message.keys} " + (if (message.keys == 1) "key is" else "keys are") + " still on after the piece"
     }
+
+    /** v1.39 — M76: the plug's adverts silent for over 10 s with the rail up (amber, small; never a CUT by itself). */
+    const val READING_LOST = "Power reading lost"
+
+    // ---- v1.39 — M76: the On hours ----------------------------------------------------------------------------------
+
+    const val ON_HOURS = "On hours"
+    const val ON_HOURS_FROM = "From"
+    const val ON_HOURS_TO = "To"
+    const val ON_HOURS_ON_NOTE = "Within them the piano stays on and connected, so Play starts at once. Outside them it is " +
+        "off: Play, Keys, Turn the piano on, Test every key and the safety check here still wake it, and the web panel can't."
+    const val ON_HOURS_OFF_NOTE = "No hours: the piano comes on for each piece, from here or the web panel, and goes off after."
+
+    /** The On hours as a line: "7:00–22:00 every day". */
+    fun hours(start: Int, end: Int): String =
+        "${OnHours.time(start)}–${OnHours.time(end)} every day" + if (end < start) " (past midnight)" else ""
+
+    /** Remote starts outside the On hours: "The piano is off until 7:00". */
+    fun offUntil(hours: OnHours): String = "The piano is off until ${hours.startText}"
+
+    /**
+     * The piano asleep with its plug, idle (the tablet's piano line, the System fact, the panel): "Piano off until 7:00 ·
+     * press Play here to wake it" outside the On hours; with none, or within them after a fault, "Piano off · press Play
+     * here to wake it".
+     */
+    fun asleep(hours: OnHours?, outside: Boolean): String =
+        if (hours != null && outside) "Piano off until ${hours.startText} · press Play here to wake it" else "Piano off · press Play here to wake it"
+
+    /**
+     * Now playing's power line (v1.39 — M76): "12.3 W now · peak 145.0 W this piece", or "— W" without a reading under
+     * 3 s old; the peak left out before one this piece.
+     */
+    fun nowLine(now: Double?, peak: Double?): String =
+        if (now == null) "— W" else "${watts(now)} now" + (peak?.let { " · peak ${watts(it)} this piece" } ?: "")
 
     // ---- The hub's row and the rail in a word --------------------------------------------------------------------------
 

@@ -70,6 +70,7 @@ import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.LocalAppFrame
 import dev.stevenjin.stevenpiano.ui.LocalFloatingPadding
 import dev.stevenjin.stevenpiano.ui.components.ConnectionLine
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.components.Eyebrow
 import dev.stevenjin.stevenpiano.ui.components.GlassHeaderPane
 import dev.stevenjin.stevenpiano.ui.components.KeyLayout
@@ -102,6 +103,7 @@ fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
     val sustain by vm.sustain.collectAsStateWithLifecycle()
     val playing by vm.playing.collectAsStateWithLifecycle()
     val tablet by vm.tabletSound.collectAsStateWithLifecycle()
+    val waking by vm.waking.collectAsStateWithLifecycle()   // v1.39 — M76
     val keyboard by vm.keyboard.collectAsStateWithLifecycle()
     val live by vm.live.collectAsStateWithLifecycle()
     val recording by vm.recording.collectAsStateWithLifecycle()
@@ -257,10 +259,14 @@ fun KeysScreen(onOpenPiano: () -> Unit, onListen: (Long) -> Unit = {}) {
             ) {
                 VelocityReadout(vm.velocity)
                 ConnectionLine(
-                    connected = link is LinkState.Connected,
+                    connected = link is LinkState.Connected && !waking,
                     playing = playing,
                     onOpenPiano = onOpenPiano,
-                    notConnected = if (tablet.active) "Not connected. The tablet plays these keys." else "Not connected. The piano won't play these keys.",
+                    notConnected = when {
+                        waking -> PowerCopy.WAKING
+                        tablet.active -> "Not connected. The tablet plays these keys."
+                        else -> "Not connected. The piano won't play these keys."
+                    },
                     sent = if (keyboard.connected && !live.open) InstrumentCopy.KEYBOARD_LIVE_OFF else "Sent to piano",
                     live = !(keyboard.connected && !live.open),
                 )

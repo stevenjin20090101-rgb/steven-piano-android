@@ -166,6 +166,17 @@ class SafetyRunner(
      * the power watch starts it again. Never after a check without the sweep (the microphone off): its pass heard no key.
      */
     private val heardAll: () -> Unit = {},
+    /**
+     * v1.39 — M76: Piano › System's "Safety check every 6 pieces" (off by default; Steven: "really annoying"). Off, no
+     * piece is counted and none begins a check; a trip ([require]) still makes one due before the next Play, and Run the
+     * safety check still runs one by hand. The quiet check after every piece and the power and I²C watches are the rail's.
+     */
+    private val every: () -> Boolean = { true },
+    /**
+     * v1.39 — M76: the power plug switches the piano's controller with the 24 V, so its repower restarts the piano: the
+     * console's `restart` is skipped. False without the plug (or before 1.39's wiring): the restart as before.
+     */
+    private val repowerRestarts: () -> Boolean = { false },
 ) : StartGate {
     private val _state = MutableStateFlow(SafetyState())
     val state: StateFlow<SafetyState> = _state.asStateFlow()
@@ -207,7 +218,7 @@ class SafetyRunner(
             waiting = null
             waitingPiece = null
             held?.invoke()   // a start asked for before the record was read: its path asks again
-            if (record.count >= EVERY && record.lock == null && !record.pending) due()
+            if (every() && record.count >= EVERY && record.lock == null && !record.pending) due()
         }
         scope.launch { host.played.collect(::onPlayed) }
     }
@@ -293,6 +304,7 @@ class SafetyRunner(
 
     private fun onPlayed(piece: Played) {
         if (!host.pianoReady()) return   // the piano didn't play it (no piano, a MIDI piano, guest play): not counted
+        if (!every()) return   // v1.39 — M76: the check every 6 pieces switched off: nothing counted
         if (!loaded) {
             early++
             return
@@ -371,6 +383,7 @@ class SafetyRunner(
             boards = facts != null && SafetyCheck.BOARDS in facts,
             restart = facts?.get(SafetyCheck.RESTART_FACT)?.trim() == "1",
             reported = facts != null,
+            plug = repowerRestarts(),   // v1.39 — M76: the repower is the restart
         )
         while (true) {
             show(step.state)

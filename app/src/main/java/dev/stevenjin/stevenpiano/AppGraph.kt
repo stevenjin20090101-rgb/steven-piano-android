@@ -159,7 +159,9 @@ import dev.stevenjin.stevenpiano.power.Boards
 import dev.stevenjin.stevenpiano.power.GuestLink
 import dev.stevenjin.stevenpiano.power.HeldKeys
 import dev.stevenjin.stevenpiano.power.IdleReading
+import dev.stevenjin.stevenpiano.power.OnHours
 import dev.stevenjin.stevenpiano.power.PairFlow
+import dev.stevenjin.stevenpiano.power.PiecePower
 import dev.stevenjin.stevenpiano.power.PlayerNow
 import dev.stevenjin.stevenpiano.power.PlugAdverts
 import dev.stevenjin.stevenpiano.power.PlugClient
@@ -175,9 +177,11 @@ import dev.stevenjin.stevenpiano.power.RailKeeper
 import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.RailPower
 import dev.stevenjin.stevenpiano.ui.LockCopy
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.collectLatest
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -196,6 +200,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -301,6 +306,7 @@ class AppGraph(private val app: Application) {
             shouldReconnect = { settings.value.autoConnect },
             isForeign = { address -> midiDevices.isForeign(address) },
             throttle = scanThrottle,
+            resting = ::pianoResting,   // v1.39 — M76: off with its plug, no reconnect loop until an ARM
         )
     }
 
@@ -610,6 +616,7 @@ class AppGraph(private val app: Application) {
             scope = appScope,
             now = SystemClock::elapsedRealtime,
             log = LinkLog::warn,
+            wake = ::wakeForUpdate,   // v1.39 — M76
         )
     }
 
@@ -943,7 +950,9 @@ class AppGraph(private val app: Application) {
                 if (pianoLink.kind.value == InstrumentKind.MidiPiano) {
                     pianoLink.connect(null)
                 } else if (BlePermissions.missing(app).isEmpty()) {
-                    pianoLink.connect(s.lastDeviceAddress)
+                    // v1.39 — M76: with the plug the piano is off until the rail wakes it (the On hours' want, or a Play).
+                    withTimeoutOrNull(PLUG_READ_MS) { plugSettings.first { it != null } }
+                    if (!plugWakesPiano()) pianoLink.connect(s.lastDeviceAddress)
                 }
             }
         }
@@ -1230,6 +1239,7 @@ class AppGraph(private val app: Application) {
             log = LinkLog::warn,
             power = railWatch,   // v1.30 — M67
             wakeLink = ::wakePianoLink,   // v1.38 — M75
+            graceMs = ::railGraceMs,   // v1.39 — M76
         )
     }
 
@@ -1355,6 +1365,8 @@ class AppGraph(private val app: Application) {
         appScope.launch { if (plugStore.migrate()) LinkLog.warn("Power plug: the Shelly plug's pairing was cleared; this version pairs a SwitchBot plug") }
         rail.start()
         followPlugAdverts()
+        followOnHours()   // v1.39 — M76
+        followPieceStarts()
         RailHold(
             appScope,
             player = combine(player.state, pianoLink.kind) { s, kind ->
@@ -1368,7 +1380,6 @@ class AppGraph(private val app: Application) {
         ).start()
         appScope.launch { remote.keyTest.state.map { it.running }.distinctUntilChanged().collect { rail.wanted(RailKeeper.KEY_TEST, it) } }
         appScope.launch { firmwareUpdater.state.map(::updateWantsRail).distinctUntilChanged().collect(rail::updateRunning) }
-        appScope.launch { rail.phase.map { it != RailPhase.Off }.distinctUntilChanged().collect(plug::hold) }
         // A keyboard's keys through Live are keys on the Keys tab: each starts the idle cut over, or wakes the rail.
         val main = Handler(android.os.Looper.getMainLooper())
         keyboard.listen(
@@ -1408,12 +1419,14 @@ class AppGraph(private val app: Application) {
             combine(pairing, fast) { p, f -> p to f }.collectLatest { (p, f) ->
                 if (p == null) {
                     plugAdverts.clear()
+                    piecePower.clear()
                     return@collectLatest
                 }
                 plugAdverts.run(plugTransport, p.address, p.mac, f) { advert ->
                     appScope.launch(Dispatchers.Main) {
                         rail.advert(advert.on)
                         powerUse.reading(advert.watts)
+                        piecePower.reading(advert.watts, playing = player.state.value.status == PlaybackStatus.Playing)   // v1.39 — M76
                     }
                 }
             }
@@ -1423,6 +1436,114 @@ class AppGraph(private val app: Application) {
             pairing.collect { p -> powerUse.load(p?.address, p?.let { plugStore.energy(it.address) }) }
         }
         appScope.launch { rail.armedAt.drop(1).collect { if (it == null) powerUse.save() } }
+    }
+
+    // ---- v1.39 — M76: the On hours, the idle link, the power on Now playing ------------------------------------------------
+
+    /** Now playing's power line: the watts now and this piece's peak, from the plug's adverts. */
+    val piecePower: PiecePower by lazy { PiecePower(SystemClock::elapsedRealtime) }
+
+    /** Bumped at each On hours boundary (and setting change), so the words that follow them are worked out again. */
+    private val hoursTick = MutableStateFlow(0L)
+
+    /**
+     * The On hours (Piano › Power plug): within them, with Steven Piano the instrument, the rail's standing want
+     * ([RailKeeper.HOURS]); outside them none. Looked at every [HOURS_LOOK_MS] on the wall clock (no alarm: the clock in
+     * the app's own process, as the quiet times), and at once when the hours or the instrument change; told to the rail
+     * only when it changes, so a fault that ended the want isn't undone until the next boundary.
+     */
+    private fun followOnHours() {
+        appScope.launch {
+            combine(plugSettings.map { it?.hours }, pianoLink.kind) { hours, kind -> hours to kind }.distinctUntilChanged().collectLatest { (hours, kind) ->
+                var told: Boolean? = null
+                while (true) {
+                    val within = hours != null && kind == InstrumentKind.StevenPiano && hours.wanted(ZonedDateTime.now())
+                    if (within != told) {
+                        if (told != null || within) LinkLog.warn("On hours: " + if (within) "within them, the piano stays on" else "outside them, the piano rests")
+                        told = within
+                        rail.wanted(RailKeeper.HOURS, within)
+                        hoursTick.value++
+                    }
+                    delay(HOURS_LOOK_MS)
+                }
+            }
+        }
+    }
+
+    /** The peak on Now playing starts again as each piece starts: a new piece, or the same from its top. */
+    private fun followPieceStarts() {
+        appScope.launch {
+            var last: Pair<PlaybackStatus, Long?>? = null
+            player.state.map { it.status to it.piece?.pieceId }.distinctUntilChanged().collect { now ->
+                val before = last
+                last = now
+                val starts = now.first == PlaybackStatus.Playing &&
+                    (before == null || before.second != now.second || player.positionMicrosNow() <= 0L)
+                if (starts) piecePower.pieceStarts()
+            }
+        }
+    }
+
+    /** Steven Piano is the instrument and its power plug switches the rail: the plug wakes the piano. */
+    private fun plugWakesPiano(): Boolean = pianoLink.kind.value == InstrumentKind.StevenPiano && plugSwitches.value
+
+    /** The rail's grace between pieces: 2 minutes outside the On hours (a person at the tablet woke it), else none. */
+    private fun railGraceMs(): Long = if (plugSettings.value?.hours?.outside(ZonedDateTime.now()) == true) RailKeeper.GRACE_MS else 0L
+
+    /**
+     * The idle link: the piano is off with its plug (the rail off), so a drop is expected (the CUT took its controller) and
+     * its link doesn't look for it until an ARM wakes it ([wakePianoLink]). No fault, nothing said.
+     */
+    private fun pianoResting(): Boolean = plugWakesPiano() && rail.phase.value == RailPhase.Off
+
+    /**
+     * The piano's words while it rests with its plug (the Piano tab's line, the System fact, the panel): "Piano off until
+     * 7:00 · press Play here to wake it" outside the On hours, else "Piano off · press Play here to wake it"; null while it
+     * is on, waking, or connected, or without the plug.
+     */
+    val pianoAsleep: StateFlow<String?> by lazy {
+        combine(plugSettings, rail.phase, stevenConnected, pianoLink.kind, hoursTick) { plug, phase, connected, kind, _ ->
+            if (plug?.switches != true || kind != InstrumentKind.StevenPiano || phase != RailPhase.Off || connected) {
+                null
+            } else {
+                PowerCopy.asleep(plug.hours, plug.hours.outside(ZonedDateTime.now()))
+            }
+        }.stateIn(appScope, SharingStarted.Eagerly, null)
+    }
+
+    /**
+     * Why a start from afar (the web panel, the relay: Play, a channel, Test every key, Turn the piano on) is refused now:
+     * outside the On hours with the piano resting, "The piano is off until 7:00". Only a person at the tablet wakes it
+     * then; once it is awake (a person there), the panel plays as usual. Null when it may go.
+     */
+    fun offHoursRefusal(): String? {
+        if (!plugWakesPiano()) return null
+        val hours = plugSettings.value?.hours ?: return null
+        return PowerCopy.offUntil(hours).takeIf { hours.refusesRemote(ZonedDateTime.now(), resting = rail.phase.value == RailPhase.Off) }
+    }
+
+    /** The panel's Turn the piano on / off (its System page): on is refused outside the On hours ([offHoursRefusal]). */
+    fun setPianoOnFromAfar(on: Boolean): String? {
+        if (on) offHoursRefusal()?.let { return it }
+        rail.manual(on)
+        return null
+    }
+
+    /** Piano › Power plug › On hours changed. */
+    fun setOnHours(hours: OnHours) {
+        appScope.launch { plugStore.setHours(hours) }
+    }
+
+    /**
+     * The firmware updater with the piano off (its controller on the plug): the rail wanted for a while
+     * ([UPDATE_WAKE_MS]: the download and the check; the transfer's own want takes over from BEGIN), and the 24 V up with
+     * the piano connected awaited ([RAIL_AWAIT_MS]). True when connected.
+     */
+    private suspend fun wakeForUpdate(): Boolean {
+        if (stevenConnected.value) return true
+        if (!withContext(Dispatchers.Main) { pianoWakes() }) return false
+        withContext(Dispatchers.Main) { rail.wantFor(RailKeeper.UPDATE_WAKE, UPDATE_WAKE_MS) }
+        return railUpWithin(RAIL_AWAIT_MS) && stevenConnected.value
     }
 
     /** A firmware update wants the rail from BEGIN (its transfer under way) until its outcome is known. */
@@ -1464,6 +1585,8 @@ class AppGraph(private val app: Application) {
             awaitRail = { railUpWithin(RAIL_AWAIT_MS) },
             log = LinkLog::warn,
             heardAll = ::railHeardAll,   // v1.31 — M68
+            every = { settings.value.safetyCheckEvery },   // v1.39 — M76: off by default
+            repowerRestarts = { railPower.available.value },   // v1.39 — M76: the controller is on the plug too
         )
     }
 
@@ -1704,6 +1827,11 @@ class AppGraph(private val app: Application) {
          * woken from off by its power plug may take the rail's 30 s for its link, then its CHECK.
          */
         const val RAIL_AWAIT_MS = 45_000L
+
+        /** v1.39 — M76: the On hours looked at this often; the firmware updater's wake wants the rail this long. */
+        const val HOURS_LOOK_MS = 30_000L
+        const val PLUG_READ_MS = 2_000L
+        const val UPDATE_WAKE_MS = 5 * 60_000L
         const val GUEST_RECONNECT_MS = 15_000L
         const val GUEST_START_MS = 5_000L
         const val CONTROL_CHANGE = 0xB0

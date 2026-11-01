@@ -345,6 +345,8 @@
 .system-page .octave.off .rail { fill: none; stroke: var(--tertiary); stroke-width: 1.5; }
 
 /* v1.26 — M62: under the Power plug row, what needs attention, in words: a relay stuck on, the tablet's words for a failure. */
+.system-page .plug-asleep { margin: -2px 0 0; padding: 0 var(--inset) 10px; font-size: 13px; line-height: 18px; color: var(--secondary); }
+.system-page .plug-row { padding: 0 var(--inset) 12px; }
 .system-page .plug-note { margin: -2px 0 0; padding: 0 var(--inset) 10px; font-size: 13px; line-height: 18px; color: var(--attention); font-weight: 600; }
 
 .system-page .board-labels {

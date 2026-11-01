@@ -35,6 +35,21 @@ class SettingsRepositoryTest {
     val tmp = TemporaryFolder()
 
     @Test
+    fun `the safety check every 6 pieces - off for an install from before 1_39, off for a new one, and kept once switched (v1_39 M76)`() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "every.preferences_pb") }
+        store.edit { it[androidx.datastore.preferences.core.booleanPreferencesKey("safetyCheckListens")] = true }   // an install from 1.38
+        val repository = SettingsRepository(store)
+        assertEquals("migrated: off", false, repository.settings.first().safetyCheckEvery)
+        assertEquals(false, PianoSettings().safetyCheckEvery)
+        repository.setSafetyCheckEvery(true)
+        assertEquals(true, repository.settings.first().safetyCheckEvery)
+        repository.setSafetyCheckEvery(false)
+        assertEquals(false, repository.settings.first().safetyCheckEvery)
+        scope.cancel()
+    }
+
+    @Test
     fun `defaults, round trips and clamping`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         val store = PreferenceDataStoreFactory.create(scope = scope) { File(tmp.root, "settings.preferences_pb") }

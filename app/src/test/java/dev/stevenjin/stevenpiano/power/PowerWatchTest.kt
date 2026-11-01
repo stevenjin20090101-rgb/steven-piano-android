@@ -140,6 +140,90 @@ class PowerWatchTest {
             }
             return watch to stuckAt
         }
+
+        /** v1.39 — M76: a stuck board's [boardWatts] on from this moment, and the pedal held down from 0 to the end. */
+        var boardFrom: Long? = null
+        var boardWatts = 144.0
+        var pedalHeld = false
+
+        /**
+         * v1.39 — M76: the stuck-board watch over the whole trace, read every second as the keeper does, the plug's readings
+         * [lag] ms late; each coil drawing [coilWatts] (the watch explains [PowerWatch.COIL_WATTS]) and the pedal's motor
+         * [pedalWatts] while down. When it found a board on, or null.
+         */
+        fun board(lag: Long, coilWatts: Double = PowerWatch.COIL_WATTS, pedalWatts: Double = BoardWatch.PEDAL_WATTS, seed: Long = 1L): Long? {
+            val noise = Random(seed)
+            val end = ms + 3_000
+            val n = ((end - START) / STEP_MS).toInt()
+            val draw = DoubleArray(n) { IDLE }
+            fun add(from: Long, to: Long, watts: Double) {
+                val first = maxOf(0L, (from - START) / STEP_MS).toInt()
+                val last = minOf(n.toLong(), (to - START) / STEP_MS).toInt()
+                for (i in first until last) draw[i] += watts
+            }
+            val strokes = strokes()
+            for (st in strokes) add(st[1], minOf(maxOf(st[2], st[1] + HeldKeys.MIN_ON_MS), st[1] + HOLD_MS), coilWatts)
+            if (pedalHeld) add(0, end, pedalWatts)
+            boardFrom?.let { add(it, end, boardWatts) }
+            val sum = DoubleArray(n + 1)
+            for (i in 0 until n) sum[i + 1] = sum[i] + draw[i]
+            fun apower(asked: Long): Double {
+                val to = ((asked - lag - START) / STEP_MS).toInt()
+                val from = ((asked - lag - 1_000 - START) / STEP_MS).toInt()
+                return (sum[to] - sum[from]) / (to - from) + NOISE * noise.nextGaussian()
+            }
+            val events = ArrayList<LongArray>()
+            for (st in strokes) {
+                events += longArrayOf(st[2], 0, st[0])
+                events += longArrayOf(st[1], 1, st[0])
+            }
+            events.sortWith(compareBy<LongArray>({ it[0] }, { it[1] }))
+            var clock = 0L
+            val keys = HeldKeys { clock }
+            var low = 0L
+            var high = 0L
+            val watch = BoardWatch(apower(0))
+            var next = 0
+            var asked = 0L
+            while (true) {
+                asked += BoardWatch.READ_EVERY_MS
+                if (asked > ms) return null
+                val answered = asked + RPC_MS
+                while (next < events.size && events[next][0] <= answered) {
+                    val e = events[next++]
+                    clock = e[0]
+                    val key = e[2].toInt()
+                    val on = e[1] == 1L
+                    if (key < 88) {
+                        val bit = 1L shl (key - 24)
+                        low = if (on) low or bit else low and bit.inv()
+                    } else {
+                        val bit = 1L shl (key - 88)
+                        high = if (on) high or bit else high and bit.inv()
+                    }
+                    keys.record(low, high, pedalHeld)
+                }
+                clock = answered
+                if (pedalHeld) keys.record(low, high, true)
+                val sample = PowerWatch.sample(asked, answered, apower(asked), { f, t -> keys.held(f, t, HOLD_MS) }, keys::pedalDown, fullPower = true, lagMs = BoardWatch.LAG_MS)
+                if (watch.playing(sample) is PowerVerdict.BoardOn) return asked
+            }
+        }
+    }
+
+    /**
+     * v1.39 — M76: clusters of 60–84 keys (every key the piano plays, nearly) every 250 ms, each held 300–1500 ms, from
+     * [from] to [until] (the whole piece by default), the pedal down throughout.
+     */
+    private fun dense(ms: Long, seed: Long, from: Long = 1_000L, until: Long = ms) = Trace(ms).apply {
+        val r = Random(seed)
+        var t = from
+        while (t < until) {
+            val keys = (24..107).shuffled(r).take(60 + r.nextInt(25))
+            for (k in keys) note(k, t, t + 300 + r.nextInt(1_201))
+            t += 250
+        }
+        pedalHeld = true
     }
 
     private fun scale(i: Int): Int = 48 + 12 * ((i / 7) % 2) + SCALE[i % 7]
@@ -324,33 +408,58 @@ class PowerWatchTest {
         repeat(7) { assertEquals(PowerVerdict.Fine, again.reading(PowerSample(t.also { t += 2_000 }, 24.0, 0.0, 0.0, false))) }
     }
 
-    // ---- After the piece ------------------------------------------------------------------------------------------------
+    // ---- The stuck board (v1.39 — M76) -----------------------------------------------------------------------------------
 
     @Test
-    fun `after the piece - back to idle passes, 12 W up in both readings is stuck, one high then idle passes`() {
-        val watch = PowerWatch(12.0).apply { failsAtRailUp = 3 }
-        assertEquals(PowerVerdict.Fine, watch.afterPiece(12.4, 12.1, active = 0, fails = 3, fullPower = true))
-        assertTrue(watch.afterPiece(24.2, 24.0, active = 0, fails = 3, fullPower = true) is PowerVerdict.Stuck)
-        assertEquals("the music's tail in the first", PowerVerdict.Fine, watch.afterPiece(25.0, 12.3, active = 0, fails = 3, fullPower = true))
-        assertEquals("the plug unread: the piano's facts decide", PowerVerdict.Fine, watch.afterPiece(null, null, active = 0, fails = 3, fullPower = true))
+    fun `a dense passage of 60 to 84 keys at Full power with the pedal down never trips the board watch, its coils a watt over too`() {
+        for (seed in 1L..3L) {
+            for (lag in LAGS) {
+                assertNull("seed $seed, $lag ms late", dense(30_000, seed).board(lag))
+                assertNull("seed $seed, $lag ms late, every coil 13 W (a supply at 26 V)", dense(30_000, seed).board(lag, coilWatts = 13.0))
+            }
+        }
     }
 
     @Test
-    fun `after the piece - a coil the piano believes on is stuck, and more I2C failures than at the rail-up`() {
-        val watch = PowerWatch(12.0).apply { failsAtRailUp = 3 }
-        assertTrue(watch.afterPiece(12.2, 12.1, active = 1, fails = 3, fullPower = true) is PowerVerdict.Stuck)
-        assertTrue(watch.afterPiece(12.2, 12.1, active = 0, fails = 4, fullPower = true) is PowerVerdict.Stuck)
-        assertEquals("fewer: the controller restarted", PowerVerdict.Fine, watch.afterPiece(12.2, 12.1, active = 0, fails = 0, fullPower = true))
-        assertEquals("unread", PowerVerdict.Fine, watch.afterPiece(12.2, 12.1, active = null, fails = null, fullPower = true))
+    fun `a dense passage that starts and stops suddenly, the plug's readings 2 s late, never trips the board watch`() {
+        for (seed in 1L..3L) {
+            for (lag in longArrayOf(1_500, 2_000)) {
+                val sudden = dense(30_000, seed, from = 10_000, until = 18_000)
+                assertNull("seed $seed, $lag ms late", sudden.board(lag))
+                assertNull("seed $seed, $lag ms late, 13 W coils", dense(30_000, seed, from = 10_000, until = 18_000).board(lag, coilWatts = 13.0))
+            }
+        }
     }
 
     @Test
-    fun `after the piece - T is 6 W at Full power, 3 W in PWM drive, above the refined idle`() {
-        val watch = PowerWatch(14.0)
-        assertEquals(PowerVerdict.Fine, watch.afterPiece(18.0, 18.0, null, null, fullPower = true))
-        assertTrue(watch.afterPiece(18.0, 18.0, null, null, fullPower = false) is PowerVerdict.Stuck)
-        watch.reading(PowerSample(2_000, 11.5, 0.0, 0.0, pedalDown = false))   // a quiet second during the piece
-        assertTrue("6.5 W above the idle of 11.5 W", watch.afterPiece(18.0, 18.0, null, null, fullPower = true) is PowerVerdict.Stuck)
+    fun `a stuck board of 144 W on a moderate passage trips 5 s after the plug first shows it`() {
+        for (lag in LAGS) {
+            val trace = legato(40_000).apply { boardFrom = 10_000 }
+            val at = trace.board(lag)
+            assertNotNull("$lag ms late: tripped", at)
+            // The plug's second-long mean shows it fully a second after its lag; the run then holds 5 s.
+            assertTrue("$lag ms late: at ${at!! - 10_000} ms", at - 10_000 in BoardWatch.UNEXPLAINED_MS..BoardWatch.UNEXPLAINED_MS + lag + 2_000)
+        }
+    }
+
+    // ---- After the piece (v1.39 — M76: three fresh readings 40 W above idle, or the piano's own facts) --------------------
+
+    @Test
+    fun `after the piece - 8 W above idle on fresh readings passes, 45 W on all three trips with its numbers, two of three high passes`() {
+        val watch = PowerWatch(12.0).apply { failsAtRailUp = 3 }
+        assertNull(watch.afterPiece(listOf(20.0, 20.1, 19.9), active = 0, fails = 3, idle = 12.0))
+        assertEquals(RailMessage.AfterPiece(45, 12), watch.afterPiece(listOf(57.0, 58.0, 57.2), active = 0, fails = 3, idle = 12.0))
+        assertNull("the music's tail in the first two", watch.afterPiece(listOf(80.0, 60.0, 12.3), active = 0, fails = 3, idle = 12.0))
+        assertNull("fewer than three fresh: the piano's facts decide", watch.afterPiece(listOf(80.0, 80.0), active = 0, fails = 3, idle = 12.0))
+    }
+
+    @Test
+    fun `after the piece - a coil the piano believes on, or more I2C failures than at the rail-up, trip at once`() {
+        val watch = PowerWatch(12.0).apply { failsAtRailUp = 3 }
+        assertEquals(RailMessage.KeysOn(1), watch.afterPiece(emptyList(), active = 1, fails = 3, idle = 12.0))
+        assertEquals(RailMessage.BoardLost(3, 4, afterPiece = true), watch.afterPiece(emptyList(), active = 0, fails = 4, idle = 12.0))
+        assertNull("fewer: the controller restarted", watch.afterPiece(emptyList(), active = 0, fails = 0, idle = 12.0))
+        assertNull("unread", watch.afterPiece(emptyList(), active = null, fails = null, idle = 12.0))
     }
 
     // ---- The rail-up cap ----------------------------------------------------------------------------------------------
@@ -366,13 +475,12 @@ class PowerWatchTest {
     // ---- The usual idle (v1.31 — M68) -----------------------------------------------------------------------------------
 
     @Test
-    fun `the usual idle - fewer than 3 kept never trip, and more than T above their median does`() {
-        assertEquals("two kept: too few to say", PowerVerdict.Fine, PowerWatch.againstUsual(40.0, listOf(10.0, 10.0), fullPower = true))
+    fun `the usual idle - fewer than 3 kept never trip, and 40 W above their median does`() {
+        assertEquals("two kept: too few to say", PowerVerdict.Fine, PowerWatch.againstUsual(60.0, listOf(10.0, 10.0), fullPower = true))
         val kept = listOf(10.4, 9.6, 10.0)   // the median: 10 W
-        assertEquals("+7 W at Full power", PowerVerdict.AboveUsual(17.0, 10.0), PowerWatch.againstUsual(17.0, kept, fullPower = true))
-        assertEquals("+5 W", PowerVerdict.Fine, PowerWatch.againstUsual(15.0, kept, fullPower = true))
-        assertEquals("+6 W is T itself", PowerVerdict.Fine, PowerWatch.againstUsual(16.0, kept, fullPower = true))
-        assertTrue("+5 W in PWM drive: over its 3 W floor", PowerWatch.againstUsual(15.0, kept, fullPower = false) is PowerVerdict.AboveUsual)
+        assertEquals("+40 W (v1.39 — M76)", PowerVerdict.AboveUsual(50.0, 10.0), PowerWatch.againstUsual(50.0, kept, fullPower = true))
+        assertEquals("+12 W: a coil's worth no longer trips", PowerVerdict.Fine, PowerWatch.againstUsual(22.0, kept, fullPower = true))
+        assertEquals("nor in PWM drive", PowerVerdict.Fine, PowerWatch.againstUsual(22.0, kept, fullPower = false))
         assertEquals("unread", PowerVerdict.Fine, PowerWatch.againstUsual(null, kept, fullPower = true))
         assertEquals("one odd reading among five barely moves it", 10.0, PowerWatch.usual(listOf(10.0, 22.0, 9.8, 10.2, 10.0))!!, 1e-9)
         assertEquals("four: the middle two's mean", 10.1, PowerWatch.usual(listOf(10.0, 10.2, 9.0, 30.0))!!, 1e-9)

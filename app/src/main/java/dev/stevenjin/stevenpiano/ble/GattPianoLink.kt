@@ -107,6 +107,11 @@ class GattPianoLink(
     private val isForeign: (address: String) -> Boolean = { false },
     /** Android's limit of 5 scans in 30 s, shared with the MIDI device picker (v1.11 — M29). */
     private val throttle: ScanThrottle = ScanThrottle(),
+    /**
+     * v1.39 — M76: the piano is off with its power plug (its controller on the plug, the 24 V cut): a drop then is that
+     * CUT, expected, and isn't reconnected until the plug's ARM asks for the link ([connect]). Any thread may answer.
+     */
+    private val resting: () -> Boolean = { false },
 ) : PianoLink {
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
@@ -852,6 +857,12 @@ class GattPianoLink(
 
     private fun startReconnecting() {
         val restarting = restartExpected()
+        if (!restarting && resting()) {
+            log("The piano is off with its power plug: not reconnecting until the plug wakes it")
+            wanted = false
+            publish()
+            return
+        }
         if (!shouldReconnect() && !restarting) {
             log("Auto-connect is off: not reconnecting")
             wanted = false
@@ -1394,6 +1405,7 @@ class GattPianoLink(
             shouldReconnect: () -> Boolean,
             isForeign: (String) -> Boolean = { false },
             throttle: ScanThrottle = ScanThrottle(),
+            resting: () -> Boolean = { false },
         ): GattPianoLink {
             val thread = HandlerThread("steven-piano-ble", Process.THREAD_PRIORITY_AUDIO).apply { start() }
             return GattPianoLink(
@@ -1404,6 +1416,7 @@ class GattPianoLink(
                 LinkLog::warn,
                 isForeign,
                 throttle,
+                resting,
             )
         }
     }

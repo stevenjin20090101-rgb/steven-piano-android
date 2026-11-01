@@ -21,7 +21,10 @@ package dev.stevenjin.stevenpiano.power
  * - [answered] of [total]: the power boards at the last good CHECK (null before one);
  * - [message]: what the tablet says now, in its words; [attention] when it needs it (amber) rather than passing;
  * - [welded]: after a CUT the plug still reads on, or the supply still draws;
- * - [guestEndsAt]: guest play this tablet keeps the rail on for ends then (wall clock, ms; null with none).
+ * - [guestEndsAt]: guest play this tablet keeps the rail on for ends then (wall clock, ms; null with none);
+ * - v1.39 — M76: [asleep], the words while the piano rests with its plug ("Piano off until 7:00 · press Play here to wake
+ *   it"); [manualEndsAt], when Turn the piano on ends by itself (wall clock, ms; null while off); [pieceNow] and
+ *   [piecePeak], Now playing's watts (whole, the now only while a piece plays and under 3 s old).
  */
 data class RailFact(
     val paired: Boolean = false,
@@ -37,6 +40,10 @@ data class RailFact(
     val attention: Boolean = false,
     val welded: Boolean = false,
     val guestEndsAt: Long? = null,
+    val asleep: String? = null,
+    val manualEndsAt: Long? = null,
+    val pieceNow: Double? = null,
+    val piecePeak: Double? = null,
 ) {
     companion object {
         /** [phase] as [rail] says it. */
