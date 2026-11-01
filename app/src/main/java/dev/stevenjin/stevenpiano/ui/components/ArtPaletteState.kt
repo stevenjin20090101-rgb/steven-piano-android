@@ -29,7 +29,7 @@ import dev.stevenjin.stevenpiano.graph
 fun rememberArtPalette(pieceId: Long, composerKey: String): ArtPalette? {
     val artwork = LocalContext.current.graph.artwork
     // v1.37 — M73: what the piece's art may show (a song of Steven's K-pop or House & Dance: never the artist's photo).
-    val layers = rememberArtLayers(pieceId)
+    val layers = rememberArtLayers(pieceId, composerKey)   // v1.39 — M77: nor a K-pop artist's
     val own = rememberArtworkRow(ArtworkEntity.forPiece(pieceId))?.takeIf { ArtLayer.OwnCover in layers }
     val portrait = rememberArtworkRow(ArtworkEntity.forComposer(composerKey))?.takeIf { ArtLayer.Portrait in layers }
     val row = own?.takeIf { it.imagePath != null } ?: portrait?.takeIf { it.imagePath != null }

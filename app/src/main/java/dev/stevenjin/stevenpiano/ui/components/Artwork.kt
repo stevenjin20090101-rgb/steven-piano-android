@@ -248,10 +248,12 @@ private fun mosaicIndex(row: Int, column: Int, count: Int): Int =
  * A composer's art: their portrait, else the mosaic of their pieces' roll cards, else (no pieces
  * to draw) the monogram of [name]. Unframed ([framed] false) it fills a cell of something else's
  * frame, as on a channel's card. Without [photo] (v1.37 — M73: an artist of Steven's K-pop on a channel's card) the
- * portrait is never shown, only the mosaic.
+ * portrait is never shown, only the mosaic; nor (v1.39 — M77, [CoverStyles.portrait]) for an artist whose pieces are
+ * all or mostly K-pop's, wherever they show: the Artists grid, an artist's page, a channel's card.
  */
 @Composable
 fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, photo: Boolean = true) {
+    val styles by LocalContext.current.graph.artwork.coverStyles.collectAsStateWithLifecycle()
     val mosaic: @Composable (Modifier) -> Unit = { frame ->
         val artwork = LocalContext.current.graph.artwork
         val ids by produceState(artwork.peekMosaic(composerKey), composerKey) { value = artwork.mosaicPieces(composerKey) }
@@ -261,7 +263,7 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
             else -> MosaicTile(ids!!, frame, framed, size)
         }
     }
-    if (photo) ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed, fallback = mosaic) else mosaic(modifier)
+    if (photo && styles.portrait(composerKey)) ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed, fallback = mosaic) else mosaic(modifier)
 }
 
 /**
@@ -276,7 +278,7 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
  */
 @Composable
 fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, title: String? = null) {
-    val layers = rememberArtLayers(pieceId)
+    val layers = rememberArtLayers(pieceId, composerKey)
     val portrait = ArtLayer.Portrait in layers
     if (ArtLayer.OwnCover in layers) {
         ArtworkImage(ArtworkEntity.forPiece(pieceId), size, modifier, framed, alignment = Alignment.Center) { frame ->
@@ -300,14 +302,16 @@ private fun BehindCover(pieceId: Long, composerKey: String, size: ArtSize, modif
 /**
  * What piece [pieceId]'s art may be, in order (v1.37 — M73, [CoverRule.layers]): a song of Steven's K-pop its roll card
  * (its cover only when chosen by hand), one of his House & Dance its album cover then its roll card, any other its own
- * cover, its composer's portrait, its roll card. No portrait until the library has said which songs those are.
+ * cover, its composer's portrait, its roll card. No portrait until the library has said which songs those are, nor
+ * (v1.39 — M77) when its composer ([composerKey]) is a K-pop artist ([CoverStyles.portrait]).
  */
 @Composable
-fun rememberArtLayers(pieceId: Long): List<ArtLayer> {
+fun rememberArtLayers(pieceId: Long, composerKey: String? = null): List<ArtLayer> {
     val styles by LocalContext.current.graph.artwork.coverStyles.collectAsStateWithLifecycle()
     val style = styles.of(pieceId)
     val chosen = if (style == CoverStyle.Plain) ArtworkPolicy.chosenByHand(rememberArtworkRow(ArtworkEntity.forCover(pieceId))) else false
-    return CoverRule.layers(style, chosen, styles.read)
+    val layers = CoverRule.layers(style, chosen, styles.read)
+    return if (composerKey != null && !styles.portrait(composerKey)) layers - ArtLayer.Portrait else layers
 }
 
 /**

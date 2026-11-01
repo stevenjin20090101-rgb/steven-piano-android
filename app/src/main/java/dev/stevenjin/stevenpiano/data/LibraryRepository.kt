@@ -199,17 +199,20 @@ class LibraryRepository(
 
     /**
      * Which pieces' art is plain (in a playlist called K-pop, as names compare) and which shows album covers (House &
-     * Dance), v1.37 — M73 ([CoverRule]), as the playlists and their pieces change.
+     * Dance), v1.37 — M73 ([CoverRule]), as the playlists and their pieces change; and (v1.39 — M77) the artists mostly in
+     * K-pop, against every artist's count of pieces ([CoverRule.kpopArtists]).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun coverStyles(): Flow<CoverStyles> =
         playlists.refs().map(CoverRule::styled).distinctUntilChanged().flatMapLatest { (plain, album) ->
-            combine(headsIn(plain), headsIn(album)) { inPlain, inAlbum ->
+            val counts: Flow<List<ComposerGroup>> = if (plain.isEmpty()) flowOf(emptyList()) else pieces.composers()
+            combine(headsIn(plain), headsIn(album), counts) { inPlain, inAlbum, composers ->
                 CoverStyles(
                     plain = inPlain.mapTo(HashSet()) { it.id },
                     album = inAlbum.mapTo(HashSet()) { it.id },
                     plainArtists = inPlain.mapNotNullTo(HashSet()) { it.composerKey.ifBlank { null } },
                     read = true,
+                    kpopArtists = CoverRule.kpopArtists(inPlain, composers.associate { it.composerKey to it.pieceCount }),
                 )
             }
         }

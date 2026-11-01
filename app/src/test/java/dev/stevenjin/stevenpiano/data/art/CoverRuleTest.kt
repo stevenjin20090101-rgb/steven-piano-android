@@ -9,9 +9,11 @@
 
 package dev.stevenjin.stevenpiano.data.art
 
+import dev.stevenjin.stevenpiano.data.db.PieceHead
 import dev.stevenjin.stevenpiano.data.db.PlaylistRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The covers' rule (v1.37 — M73): K-pop plain, House & Dance its album covers, never an artist's photo for either. */
@@ -55,5 +57,17 @@ class CoverRuleTest {
     @Test
     fun `the playlists named K-pop are plain and House & Dance album, Apple's own K-Pop list too`() {
         assertEquals(listOf(3L, 9L) to listOf(4L), CoverRule.styled(playlists))
+    }
+
+    @Test
+    fun `an artist whose pieces are all or mostly K-pop's shows the plain art, one K-pop song among many keeps the photo`() {
+        val inKpop = listOf(PieceHead(1, "bts"), PieceHead(2, "bts"), PieceHead(3, "twice"), PieceHead(4, "coldplay"), PieceHead(5, ""))
+        val counts = mapOf("bts" to 2, "twice" to 2, "coldplay" to 6, "" to 3)
+        val kpop = CoverRule.kpopArtists(inKpop, counts)
+        assertEquals("all, or half and more", setOf("bts", "twice"), kpop)
+        val read = CoverStyles(read = true, kpopArtists = kpop)
+        assertFalse(read.portrait("bts"))
+        assertTrue(read.portrait("coldplay"))
+        assertFalse("no photo before the styles are read", CoverStyles.Unread.portrait("coldplay"))
     }
 }
