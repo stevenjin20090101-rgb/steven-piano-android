@@ -3939,3 +3939,24 @@ piano off** near the top ("On · turns off in 28 min"): a `manual` want through 
 minutes after the last note. Deferred: the idle "Piano off · turns on when you play" words and no reconnect loop while
 off, the 5 s on-check while playing, the 2-minute grace between pieces, repower-as-restart for the safety check, the
 panel's button. Brief `~/.claude/plans/m75-plug-on-while-playing-brief.md`.
+
+# v1.39 — M77: kiosk that works, an app that keeps running, K-pop artists plain
+
+Steven, 2026-11-01: from 1.39 the plug keeps the piano on all day (7:00–22:00), and the tablet's watches are the safety
+layer, so the app must always be running on the school tablet (a Lenovo TB336FU, ZUI 17.5, Android 16), and kiosk mode
+must work; it was never set up, because Android refuses the device owner while any account is on the tablet. **Kiosk**:
+without the device owner the **Kiosk mode** switch stays off and can't be touched (no screen-pinning stand-in, which
+would look on and lock nothing), its note says "Make the app the device owner first: the steps are below", and the page
+shows **Set up kiosk**: "Without this, kiosk mode can't lock the tablet", then four numbered steps (remove every account
+in Settings › Accounts, re-added after; turn on USB debugging; run the one adb line, in a box with **Copy**; come back,
+set a PIN and turn on Kiosk mode), with what Android answers while an account is left. The page asks again as it shows,
+so the guide goes once the line has run. **Keeping it running**: as the device owner the app can't be force-stopped or
+cleared from Settings (Android 11+); the first start asks Android once to let it run without battery limits (its own
+dialog); **Piano › System**'s Tablet card ends with **Runs reliably** (Yes, or No in amber with what is missing: "not
+device owner", "battery restricted", "not watching the plug", and the first one's fix in a line), then the battery row
+(**Allow**, while limited) and **App settings** (Lenovo's "Allow background activity" lives there). Whenever a plug is
+paired, a quiet notification, "Watching the piano's power", keeps the app in the foreground; it starts with the app (at
+boot too, as kiosk's home screen) and comes back if Android ends it. The web panel's System page mirrors the row.
+**K-pop artists**: an artist whose pieces are all or mostly (half or more) in K-pop shows the plain art too, in the
+Artists grid, on the artist's page and wherever their portrait would show; one K-pop song among many keeps the photo.
+Brief `~/.claude/plans/m77-kiosk-reliable-brief.md`.

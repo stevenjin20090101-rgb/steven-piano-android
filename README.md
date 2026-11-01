@@ -489,7 +489,8 @@ One-time setup, with a computer and a USB cable:
 1. Start from a factory-fresh tablet (or reset it: Settings › System › Reset options ›
    Erase all data, which clears everything on it). Go through Android's setup **without
    adding a Google account**: Android refuses a device owner once any account is on
-   the device. Accounts can be added afterwards.
+   the device. Accounts can be added afterwards. A tablet already in use needs no reset:
+   removing every account is enough (see *Kiosk*).
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
    `adb install ../apk/steven-piano-1.38.apk`.
 3. Make the app the device owner:
@@ -1181,16 +1182,28 @@ request** are on, the request page's QR code.
 
 **Turning it on**
 
-1. Make the app the tablet's device owner, once, with a computer and a USB cable (see
-   *School tablet* above for the fresh-tablet steps):
+Kiosk mode needs the app to be the tablet's device owner; without it, kiosk mode can't lock the tablet, so the
+**Kiosk mode** switch stays off and can't be touched, and the Kiosk page shows these steps (since 1.39; there is no
+screen-pinning stand-in).
+
+1. Remove every account from the tablet: **Settings › Accounts**, each one (a Google account, a Lenovo ID, any other).
+   Android refuses a device owner while any account is there, with:
+
+   ```
+   java.lang.IllegalStateException: Not allowed to set the device owner because there are already some accounts on the device
+   ```
+
+   The accounts can be added again afterwards; nothing else on the tablet needs to go, no factory reset.
+2. Turn on USB debugging (see *Sideload*) and connect the tablet to a computer.
+3. Make the app the tablet's device owner, once (the Kiosk page has this line with a Copy button):
 
    ```bash
    adb shell dpm set-device-owner dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
    # Success: Device owner set to package dev.stevenjin.stevenpiano/.admin.PianoDeviceAdmin
    ```
 
-2. On the tablet: **Piano › Kiosk › Set a PIN** (six digits, twice), then turn on
-   **Kiosk mode**. The screen locks to the app at once.
+4. Back on the tablet: **Piano › Kiosk › Set a PIN** (six digits, twice), then turn on
+   **Kiosk mode**. The screen locks to the app at once. USB debugging can go off again.
 
 If the tablet has its own screen lock (a PIN, pattern or password in Android's settings),
 Android keeps it: after a restart the tablet waits at the lock screen. Remove it to start
@@ -1239,6 +1252,25 @@ installed over adb leaves Android's launcher up until Home is pressed. An update
 firmware carries on if the tablet rests meanwhile, and Firmware and status keeps it in view
 while the settings are locked: how far it has got, and how it ended; only its Cancel asks for
 the PIN (and while it runs, its row opens without it).
+
+## Keeping the app running
+
+From 1.39 the power plug keeps the piano on all day (7:00–22:00), and the tablet's watches over it are the safety
+layer, so the app must always be running on the school tablet. Four things keep it so:
+
+- **The device owner** (see *Kiosk*): Settings can no longer force-stop the app or clear its data
+  (`setUserControlDisabledPackages`, Android 11 and later, set as the app starts), and kiosk mode makes it the home
+  screen, so a restart lands back in it, with the screen on while plugged in.
+- **No battery limits**: on its first start the app asks Android, once, to let it run in the background (Android's own
+  dialog); **Piano › System › Allow** asks again.
+- **Lenovo's own switch**: ZUI has one more, **Allow background activity**, under Battery on the app's page in
+  Android's settings; **Piano › System › App settings** opens that page.
+- **The power watch**: whenever a plug is paired, a quiet notification, "Watching the piano's power", keeps the app in
+  the foreground, so Android doesn't stop it in the background. It starts with the app (at boot too, as the home screen
+  in kiosk mode) and comes back by itself if Android ends it.
+
+**Piano › System**'s Tablet card says **Runs reliably**: Yes, or No in amber with what is missing (not the device owner,
+the battery restricted, the plug not watched) and the fix in one line. The web panel's System page shows the same row.
 
 ## Quiet times
 

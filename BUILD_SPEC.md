@@ -10320,3 +10320,24 @@ guest window rewritten), `AdvertWatchTest` (an "on" advert while a want waits is
 ## The release: 1.38 (versionCode 49)
 
 M75 first cut merged: the controller is on the plug, so a want with no link switches the plug on first (confirmed by GATT), wakes the link (30 s), then CHECKs; no advert CUT while anything wants the rail; Play holds until the rail is up; Turn the piano on (30 min). Deferred to 1.39: idle words, the 5 s check, the 2-minute grace, the panel button, the firmware updater and Keys before the link.
+
+# v1.39 — M77: kiosk that works, an app that keeps running, K-pop artists plain
+
+Brief `~/.claude/plans/m77-kiosk-reliable-brief.md`; worktree `android-wt-m77`, branch `m77-kiosk`, from `24c3b08` (main
+with 1.38), beside M76. No version bump, no signing, no emulator. **Kiosk**: the switch was already disabled without the
+device owner (`KioskMode.turnOn` returns false on `NotOwner`; the activity only `startLockTask`s when
+`isLockTaskPermitted`), but said only "README › Kiosk": kept disabled, now `KioskPageCopy.switchEnabled`, and
+`KioskPage.SetupGuide` shows while `showsSetup` (checked, not owner) with `SETUP_STEPS` and `ADB_LINE` (Copy:
+`ClipboardManager`). **Keep running**: `KioskDevice.userControlDisabled`/`setUserControlDisabled` (API 30+),
+`KioskController.keepRunning()` (once, as owner) from `KioskMode.start()` and `refresh()` on a new owner, `letStop()`
+before `DeviceOwnerRelease`; `admin/KeepRunning` (`isIgnoringBatteryOptimizations`, `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+with the list as fallback, `ACTION_APPLICATION_DETAILS_SETTINGS`), the manifest's `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`;
+`AppGraph.askBatteryOnce` after the first frame (not while locked; `SettingsRepository.batteryAsked`);
+`service/PowerService` (`connectedDevice`, `START_STICKY`, notification 14 on channel `power`, `state`), started and
+stopped by `AppGraph.followPowerWatch` with the pairing and by `startPowerWatchIfPaired` from `onStart`, only with the
+Bluetooth permission. `AppReading.batteryUnrestricted`/`powerWatch` (`/api/system` `app`), `ui/ReliableCopy`
+(`Reliability`, `ReliableCopy`), `pages/ReliableRows` at the foot of the Tablet card, `system.js`'s `reliable()`. **K-pop
+artists**: `CoverStyles.kpopArtists` from `CoverRule.kpopArtists` (plain pieces per artist × 2 ≥ their count in
+`composer_groups`), `CoverStyles.portrait`; `ComposerArt`, `rememberArtLayers(pieceId, composerKey)` and the panel's
+composers and pieces honour it. **Tests**: `KioskExitTest` (the switch), `ReliableCopyTest`, `CoverRuleTest` (K-pop
+artists); `KioskModeTest` and `WebApiTest` expectations updated.
