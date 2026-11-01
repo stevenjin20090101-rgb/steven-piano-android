@@ -10429,3 +10429,16 @@ sqlite-jdbc: only the six columns written, the unique index, the first added), `
 ## The release: 1.41 (versionCode 52)
 
 A new version in place (INDEX.csv's `replaces`). 1.40 (versionCode 51, M78) was already out when this began, so it is 1.41.
+
+## Fixed after the release: the corpus check
+
+`midi/INDEX.csv` now lists the modern songs too (2,392 rows: the three classical collections' 1,727, then 665 under
+`modern/`), so `LibraryFixtureTest -Pcorpus` failed on its count (2,392 rows made, 1,727 kept). `library_titles.csv`
+stays the classical library, as the pack has it (`ChannelsTest`: 1,727 Classical, 0 Modern; `BuiltInPlaylistsTest`:
+1,727): its test, now `library_titles_csv is what the importer makes of the classical collections`, makes only the rows
+whose path is outside `modern/`, and those 1,727 match the fixture as it was, row by row. The modern songs are fan-made,
+not for the pack, and change as the library does; `CorpusTest` still parses and lays out every file, theirs too. Tests
+only (`LibraryFixtureTest.kt`, `LibraryFixture.kt`'s note), no new version. `./gradlew test`: 1,883 unit tests (12
+skipped, the corpus's 7 among them), none failing; with `-Pcorpus` the same 1,883, 5 skipped (the sound render and
+Studio's models), none failing: `CorpusTest` read 4,119 files (both copies of the classical library and the 665 modern
+songs), and only the damaged Borodin's two copies warn.

@@ -22,20 +22,25 @@ import java.security.MessageDigest
 
 /**
  * The library fixtures are what the importer makes of Steven's library: `library_titles.csv`, for
- * every INDEX.csv row in order, the collection and composer it gives, the title after the
- * importer's rules (a file stub gives way to Track 0's name) and the file's note count and length;
- * `library_titles_all_songs.csv`, the same for `ALL-SONGS.zip`. Skipped unless Gradle runs with
- * `-Pcorpus` (the library is outside this repository), as `CorpusTest`.
+ * every INDEX.csv row of the classical collections in order, the collection and composer it gives,
+ * the title after the importer's rules (a file stub gives way to Track 0's name) and the file's
+ * note count and length; `library_titles_all_songs.csv`, the same for `ALL-SONGS.zip`. Skipped
+ * unless Gradle runs with `-Pcorpus` (the library is outside this repository), as `CorpusTest`.
  */
 class LibraryFixtureTest {
+    /**
+     * Only the classical collections: INDEX.csv also lists the modern songs, under `modern/`, and
+     * they stay out of the fixture. They are fan-made, not for the library pack (`midi/README.md`),
+     * and they change as the library does. `CorpusTest` still parses every file, theirs too.
+     */
     @Test
-    fun `library_titles_csv is what the importer makes of the corpus`() {
+    fun `library_titles_csv is what the importer makes of the classical collections`() {
         val root = System.getProperty("stevenpiano.corpus")
         assumeTrue("Run with -Pcorpus to check the fixture against the MIDI library", root != null)
         val dir = File(root!!)
         val indexText = File(dir, IndexCsv.FILE_NAME).readText()
         val index = IndexCsv.parse(indexText)
-        val expected = CsvReader.parse(indexText).drop(1).filter { it.size >= 5 }.map { cells ->
+        val expected = CsvReader.parse(indexText).drop(1).filter { it.size >= 5 && !it[4].startsWith("modern/") }.map { cells ->
             val file = File(dir, cells[4])
             val midi = SmfParser.parse(file.readBytes())
             val meta = TitleHeuristics.metadata(file.name, index.lookup(cells[4]), midi.sequenceNames)

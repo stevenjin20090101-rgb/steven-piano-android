@@ -21,11 +21,11 @@ import java.io.File
  * composer is normalized by [ComposerNames], its keys come from `PieceEntity.named` and its genre
  * from [Genres.of] (an empty library's artists), as on import.
  *
- * - [corpus]: `library_titles.csv`, Steven's MIDI library (`Player Piano/midi`, 1,727 files) as
- *   the importer names it: the collection and composer INDEX.csv gives, the title after the
- *   importer's rules (piano-midi.de's file stubs give way to their Track 0 names), and each
- *   file's note count and length. `LibraryFixtureTest` checks it against the files with
- *   `-Pcorpus`.
+ * - [corpus]: `library_titles.csv`, Steven's MIDI library (`Player Piano/midi`: its classical
+ *   collections, 1,727 files, not the modern songs under `modern/`) as the importer names it: the
+ *   collection and composer INDEX.csv gives, the title after the importer's rules (piano-midi.de's
+ *   file stubs give way to their Track 0 names), and each file's note count and length.
+ *   `LibraryFixtureTest` checks it against the files with `-Pcorpus`.
  * - [allSongs]: `library_titles_all_songs.csv`, the same library imported from `ALL-SONGS.zip`
  *   instead (README › Bring in the music): 1,726 files, named from their file names ("Composer -
  *   Title"; piano-midi.de's under their official names), with no playlists.
