@@ -10393,3 +10393,7 @@ stays; the idle `CoilOn` only logs (once per 30 s run). **Tests:** `RailKeeperTe
 coil-on cut with a new keeper and Skip, the non-fault CUTs, the quick look; the leeway numbers), `SafetyRunnerTest` (quick
 by hand, cooling then the sweep, a fault during a quick check; the sweep tests now start from a fault), `SafetyStoreTest`
 (the fault's round-trip and migration), `PowerWatchTest` (80 W after the piece and at the usual idle).
+
+## The release: 1.40 (versionCode 51)
+
+M78 merged: the key sweep only after a fault CUT (other checks quick and silent), a 25-minute cool-down after a fault (persisted; Skip in Power plug behind the PIN), and an 80 W leeway on every power trip (the 100 W rail-up cap kept).
