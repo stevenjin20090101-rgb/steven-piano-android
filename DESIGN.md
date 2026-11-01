@@ -3983,3 +3983,22 @@ too, whole watts). **1.38's leftovers**: no reconnect loop while the piano rests
 before the link are dropped with "Waking the piano…", the safety check's repower is its restart, the panel's Turn the
 piano on / off. **The safety check every 6 pieces** is off by default (Steven: "really annoying"); a trip still requires
 one, and it runs by hand. Brief `~/.claude/plans/m76-on-hours-brief.md`.
+
+# v1.40 — M78: the key sweep only after a fault, and a 25-minute cool-down
+
+Steven, 2026-11-01: "test only after a power fault shut off where keys are stuck, and add a cool down period for it as
+well of 25 min, but in plug settings that could be bypassed"; then an 80 W leeway on every power trip. **The sweep**
+(every key with the microphone) runs only in a safety check a fault CUT called for: a power trip, `!i2cfails` rising,
+`!active` after a piece, a coil on. Every other check (Run the safety check with no fault, the off-by-default 6th piece)
+is quick and silent: the stop, `!active`, the boards, then `!i2cfails` and the idle draw on two fresh adverts; System
+says "quick check, no keys struck". Missed keys still only warn; Test every key is unchanged. **The cool-down**: a fault
+CUT begins 25 minutes in which nothing switches the plug on (Play, Turn the piano on, Keys, the On hours, the panel, the
+safety check, the firmware update; an "on" advert is CUT), kept across restarts. "Cooling down after a fault · 24 min
+left" is on Play's refusal (the card, for a moment), Piano › Power plug, the Piano tab, System and the panel; then "Run
+the safety check to play again" until the sweep check passes. **Skip the cool-down** (Piano › Power plug, only while
+cooling, behind the kiosk PIN as the page is) asks "The coils may still be hot. Skip the 25-minute cool-down?", is
+logged, and leaves the check required. The On hours ending, the grace, Turn the piano off and the piano not starting
+never cool down. **The 80 W leeway**: the draw cuts the 24 V only at 80 W or more above what is explained (idle, plus the
+notes and the pedal while playing): playing for 5 s, idle on two readings, after the piece on three fresh adverts, the
+usual idle at rail-up; the rail-up's absolute 100 W cap stays, and the 10 W / 30 s coil rule only logs. Brief
+`~/.claude/plans/m78-fault-cooldown-brief.md`.
