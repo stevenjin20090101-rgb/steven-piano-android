@@ -88,6 +88,16 @@ class FakeKioskDevice(
 
     override fun isLocked(): Boolean = locked
 
+    /** The packages the person may not force-stop (v1.39 — M77). */
+    var unstoppable: List<String> = emptyList()
+
+    override fun userControlDisabled(): List<String> = unstoppable
+
+    override fun setUserControlDisabled(packages: List<String>) {
+        change("setUserControlDisabledPackages", packages)
+        unstoppable = packages
+    }
+
     companion object {
         const val PACKAGE = "dev.stevenjin.stevenpiano"
     }

@@ -14,7 +14,9 @@ import dev.stevenjin.stevenpiano.ui.components.PinWait
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KioskPageCopy
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.SET_A_PIN_FIRST
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Kiosk mode's way out and its page, in words (DESIGN.md › v1.6.1 — M20). */
@@ -53,5 +55,18 @@ class KioskExitTest {
         val refused = owner.copy(problem = "Android refused kiosk mode.")
         assertEquals("Android refused kiosk mode.", KioskPageCopy.switchNote(on = false, refused, pinSet = true))
         assertNull(KioskPageCopy.explanation(on = false, refused, pinSet = true))
+    }
+
+    @Test
+    fun `without the device owner the switch can't be turned on and the setup guide shows, with it it can`() {
+        val notOwner = KioskStatus(checked = true)
+        val owner = KioskStatus(checked = true, owner = true)
+        assertFalse("no screen pinning instead: it stays off", KioskPageCopy.switchEnabled(on = false, notOwner, pinSet = true))
+        assertTrue(KioskPageCopy.showsSetup(notOwner))
+        assertEquals(KioskPageCopy.MAKE_DEVICE_OWNER, KioskPageCopy.switchNote(on = false, notOwner, pinSet = true))
+        assertTrue(KioskPageCopy.switchEnabled(on = false, owner, pinSet = true))
+        assertFalse(KioskPageCopy.showsSetup(owner))
+        assertTrue("once on, it can always go off", KioskPageCopy.switchEnabled(on = true, notOwner, pinSet = true))
+        assertFalse("no guide before the start-up checks have said", KioskPageCopy.showsSetup(KioskStatus()))
     }
 }

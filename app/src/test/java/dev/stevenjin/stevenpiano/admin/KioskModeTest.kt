@@ -88,7 +88,8 @@ class KioskModeTest {
         kiosk.start()
         assertTrue(kiosk.status.value.checked && kiosk.status.value.owner)
         assertFalse("no PIN yet", kiosk.turnOn())
-        assertEquals("nothing touched without a PIN", emptyList<String>(), device.calls)
+        // v1.39 — M77: the start, as device owner, keeps the app from being force-stopped; nothing else without a PIN.
+        assertEquals("nothing touched without a PIN", listOf("setUserControlDisabledPackages [$PACKAGE]"), device.calls)
 
         kiosk.setPin("123456")
         assertTrue(settings.settings.first().kioskPinSet)
@@ -212,6 +213,7 @@ class KioskModeTest {
                 "setKeyguardDisabled false",
                 "setLockTaskFeatures ${KioskController.LOCK_TASK_FEATURES_DEFAULT}",
                 "setLockTaskPackages []",
+                "setUserControlDisabledPackages []",   // v1.39 — M77: force-stop allowed again before the role goes
                 "clearDeviceOwnerApp",
             ),
             device.calls,

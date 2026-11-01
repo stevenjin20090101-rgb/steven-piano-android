@@ -133,8 +133,9 @@ class KioskMode(
             if (!controller.isDeviceOwner()) {
                 controller.tidyWithoutOwner()
                 if (on) settings.setKioskEnabled(false)
-            } else if (on && !controller.lockTaskPermitted()) {
-                if (controller.enable() is KioskResult.Refused) problem = REFUSED
+            } else {
+                controller.keepRunning()   // v1.39 — M77: never force-stopped, kiosk mode or not
+                if (on && !controller.lockTaskPermitted() && controller.enable() is KioskResult.Refused) problem = REFUSED
             }
         } finally {
             // Whatever happened above, the kiosk goes on from what Android says now.
@@ -154,14 +155,19 @@ class KioskMode(
         controller.disable(settings.kioskStayOnBefore() ?: 0)
         settings.setKioskEnabled(false)
         settings.setKioskStayOnBefore(null)
+        controller.letStop()   // v1.39 — M77
         val released = ownerRelease.release()
         _status.update { it.copy(owner = controller.isDeviceOwner(), unlockedForNow = false, keyguardKept = false, problem = null) }
         released
     }
 
-    /** Whether the app is the device owner now (the Kiosk page asks as it opens: `dpm set-device-owner` may have run meanwhile). */
+    /**
+     * Whether the app is the device owner now (the Kiosk page asks as it opens: `dpm set-device-owner` may have run
+     * meanwhile); a new owner keeps the app running at once (v1.39 — M77, [KioskController.keepRunning]).
+     */
     fun refresh() {
         val owner = controller.isDeviceOwner()
+        if (owner && !_status.value.owner) controller.keepRunning()
         _status.update { it.copy(owner = owner) }
     }
 

@@ -66,6 +66,12 @@ interface KioskDevice {
 
     /** Whether the screen is locked to the app now (lock task, not the person's own screen pinning). */
     fun isLocked(): Boolean
+
+    /** The packages the person may not force-stop or clear (Android 11 and later; none before). v1.39 — M77. */
+    fun userControlDisabled(): List<String>
+
+    /** Those packages, as a device owner sets them (`setUserControlDisabledPackages`); ignored before Android 11. */
+    fun setUserControlDisabled(packages: List<String>)
 }
 
 /** What turning kiosk mode on did. */
@@ -140,6 +146,22 @@ class KioskController(
         step("bring the lock screen back") { device.setKeyguardDisabled(false) }
         step("put the lock task features back") { device.setLockTaskFeatures(LOCK_TASK_FEATURES_DEFAULT) }
         step("empty the lock task list") { device.setLockTaskPackages(emptyList()) }
+    }
+
+    /**
+     * As the device owner, the app keeps running (v1.39 — M77): Settings can't force-stop it or clear its data
+     * (`setUserControlDisabledPackages`, Android 11 and later, which also keeps it out of App Standby's buckets), so the
+     * plug's watches never stop by a tap. Kiosk mode or not; set once, touching nothing when it is already so.
+     */
+    fun keepRunning() {
+        if (!runCatching { device.isDeviceOwner() }.getOrDefault(false)) return
+        if (packageName in runCatching { device.userControlDisabled() }.getOrDefault(emptyList())) return
+        step("keep the app from being force-stopped") { device.setUserControlDisabled(listOf(packageName)) }
+    }
+
+    /** Before the device owner goes ([DeviceOwnerRelease]): the person may force-stop the app again. */
+    fun letStop() {
+        if (runCatching { device.isDeviceOwner() }.getOrDefault(false)) step("let the app be force-stopped") { device.setUserControlDisabled(emptyList()) }
     }
 
     /** Not the device owner (any more): a home alias left on goes off, so the app never stays a launcher. Touches nothing else. */
@@ -227,4 +249,11 @@ private class AndroidKioskDevice(private val context: Context) : KioskDevice {
 
     override fun isLocked(): Boolean =
         context.getSystemService(ActivityManager::class.java)?.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_LOCKED
+
+    override fun userControlDisabled(): List<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) owned().getUserControlDisabledPackages(admin) else emptyList()
+
+    override fun setUserControlDisabled(packages: List<String>) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) owned().setUserControlDisabledPackages(admin, packages)
+    }
 }
