@@ -438,5 +438,16 @@
     "minSdk": 26,
     "tag": "v1.36",
     "publishedAt": "2026-10-31"
+  },
+  {
+    "versionCode": 48,
+    "versionName": "1.37",
+    "notes": "Library: modern songs are sorted into playlists by their Apple Music genre (K-Pop joins your K-pop, Dance/House/Electronic join House & Dance; the imported Pop and MIDI folders are gone, no songs lost). K-pop shows plain covers; House & Dance songs show their own album covers. Library opens on Playlists. Studio: new genre styles (Lo-fi, House, Chill / ambient, Cinematic / pop ballad), each a new piece started from one of your songs in that genre.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.37/steven-piano-1.37.apk",
+    "sha256": "0ec6c6006e82164eccced5c999f6e4ccf868b8d31d1fbb1e04875e04aba22d99",
+    "sizeBytes": 14464161,
+    "minSdk": 26,
+    "tag": "v1.37",
+    "publishedAt": "2026-11-01"
   }
 ]
