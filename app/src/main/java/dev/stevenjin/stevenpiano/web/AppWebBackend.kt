@@ -30,7 +30,10 @@ import dev.stevenjin.stevenpiano.ble.LinkState
 import dev.stevenjin.stevenpiano.data.Genres
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistOrder
+import dev.stevenjin.stevenpiano.data.art.ArtLayer
 import dev.stevenjin.stevenpiano.data.art.ArtSize
+import dev.stevenjin.stevenpiano.data.art.CoverRule
+import dev.stevenjin.stevenpiano.data.art.CoverStyles
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.imports.ImportBatch
@@ -140,11 +143,13 @@ class AppWebBackend(
         val settings = graph.settings.value
         val portraits = portraits()
         val covers = covers()
+        val art = webArt()
         val piece = player.piece
         val shown = piece?.let {
+            val (portrait, cover) = art.shows(it.pieceId, it.composerKey, portraits, covers)
             WebPiece(
-                it.pieceId, it.title, it.composer, it.composerKey, it.durationMicros / MICROS_PER_MS, portrait = it.composerKey in portraits,
-                cover = it.pieceId in covers, artVersion = covers[it.pieceId] ?: portraits[it.composerKey] ?: 0,
+                it.pieceId, it.title, it.composer, it.composerKey, it.durationMicros / MICROS_PER_MS, portrait = portrait,
+                cover = cover, artVersion = (if (cover) covers[it.pieceId] else null) ?: (if (portrait) portraits[it.composerKey] else null) ?: 0,
             )
         }
         val queue = player.queue
@@ -154,7 +159,7 @@ class AppWebBackend(
         val known = library { graph.library.pieces(itemIds) }.orEmpty()
         val asked = requested()
         val items = itemUids.zip(itemIds).mapNotNull { (uid, id) ->
-            known[id]?.let { WebQueueItem(uid, it.toWeb(portraits, covers), requested = uid in asked) }
+            known[id]?.let { WebQueueItem(uid, it.toWeb(portraits, covers, art), requested = uid in asked) }
         }
         val channel = player.channel?.let { key ->
             WebChannelPlaying(key, channelName(key) ?: key, settings.channelVolume(key))
@@ -236,8 +241,9 @@ class AppWebBackend(
         }.orEmpty()
         val portraits = portraits()
         val covers = covers()
+        val art = webArt()
         val from = offset.coerceIn(0, pieces.size)
-        val page = pieces.subList(from, (from + limit).coerceAtMost(pieces.size)).map { it.toWeb(portraits, covers) }
+        val page = pieces.subList(from, (from + limit).coerceAtMost(pieces.size)).map { it.toWeb(portraits, covers, art) }
         return WebPage(pieces.size, from, page)
     }
 
@@ -255,7 +261,8 @@ class AppWebBackend(
         val playlist = playlists().firstOrNull { it.id == id } ?: return null
         val portraits = portraits()
         val covers = covers()
-        val pieces = library { graph.library.inPlaylist(id).first() }.orEmpty().map { it.toWeb(portraits, covers) }
+        val art = webArt()
+        val pieces = library { graph.library.inPlaylist(id).first() }.orEmpty().map { it.toWeb(portraits, covers, art) }
         return WebPlaylistDetail(playlist, pieces)
     }
 
@@ -270,8 +277,9 @@ class AppWebBackend(
         if (pieces.isEmpty()) return null
         val portraits = portraits()
         val covers = covers()
+        val art = webArt()
         val name = pieces.minOf { it.composer }
-        return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits, portraits[key] ?: 0), pieces.map { it.toWeb(portraits, covers) })
+        return WebComposerDetail(WebComposer(key, name, pieces.size, key in portraits, portraits[key] ?: 0), pieces.map { it.toWeb(portraits, covers, art) })
     }
 
     override suspend fun composerArt(key: String, size: WebArtSize): WebImage? = portrait(key, artSize(size))
@@ -403,6 +411,7 @@ class AppWebBackend(
         val summaries = graph.channelPools.summaries.value ?: return emptyList()
         val settings = graph.settings.value
         val portraits = portraits()
+        val plainArtists = graph.artwork.coverStyles.value.plainArtists   // v1.37 — M73: no photo of a K-pop artist on a card
         val playing = onMain { graph.channelPlayer.playing }
         return summaries.map { card ->
             WebChannel(
@@ -412,7 +421,10 @@ class AppWebBackend(
                 playable = card.playable,
                 playing = card.key == playing,
                 volume = settings.channelVolume(card.key),
-                composers = card.composers.map { WebCardComposer(it.key, it.name, it.key in portraits, portraits[it.key] ?: 0) },
+                composers = card.composers.map { c ->
+                    val portrait = c.key in portraits && c.key !in plainArtists
+                    WebCardComposer(c.key, c.name, portrait, if (portrait) portraits[c.key] ?: 0 else 0)
+                },
                 genre = Genres.name(card.genre),
             )
         }
@@ -719,11 +731,33 @@ class AppWebBackend(
     private fun channelName(key: String): String? =
         graph.channelPools.summary(key)?.name ?: graph.channels.firstOrNull { it.key == key }?.name
 
-    private fun PieceEntity.toWeb(portraits: Map<String, Long>, covers: Map<Long, Long>): WebPiece =
-        WebPiece(
-            id, title, composer, composerKey, durationMs, composerShort = composerShort, favorite = favorite, portrait = composerKey in portraits,
-            cover = id in covers, artVersion = covers[id] ?: portraits[composerKey] ?: 0, genre = Genres.name(genre),
+    private fun PieceEntity.toWeb(portraits: Map<String, Long>, covers: Map<Long, Long>, art: WebArt): WebPiece {
+        val (portrait, cover) = art.shows(id, composerKey, portraits, covers)
+        return WebPiece(
+            id, title, composer, composerKey, durationMs, composerShort = composerShort, favorite = favorite, portrait = portrait,
+            cover = cover, artVersion = (if (cover) covers[id] else null) ?: (if (portrait) portraits[composerKey] else null) ?: 0,
+            genre = Genres.name(genre),
         )
+    }
+
+    /**
+     * The covers' rule as the panel reads it (v1.37 — M73, [CoverRule]): which songs are Steven's K-pop and House & Dance,
+     * and, when any song is plain, the covers chosen by hand (a plain song still shows one).
+     */
+    private suspend fun webArt(): WebArt {
+        val styles = graph.artwork.coverStyles.value
+        val chosen = if (styles.plain.isEmpty()) emptySet() else withTimeoutOrNull(READ_TIMEOUT_MS) { graph.artwork.coversChosenByHand() }.orEmpty()
+        return WebArt(styles, chosen)
+    }
+
+    /** [styles] and the covers [chosen] by hand: what a piece's art in the panel may be. */
+    private class WebArt(val styles: CoverStyles, val chosen: Set<Long>) {
+        /** Whether piece [id] shows its composer's portrait and whether its own cover, of those there are. */
+        fun shows(id: Long, composerKey: String, portraits: Map<String, Long>, covers: Map<Long, Long>): Pair<Boolean, Boolean> {
+            val layers = CoverRule.layers(styles.of(id), chosenByHand = id in chosen, read = styles.read)
+            return (ArtLayer.Portrait in layers && composerKey in portraits) to (ArtLayer.OwnCover in layers && id in covers)
+        }
+    }
 
     /** A piece as guests are offered it (v1.14 — M37): what its row says, nothing looked up. */
     private fun PieceEntity.toGuest(): WebPiece =

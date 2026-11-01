@@ -47,7 +47,7 @@ import dev.stevenjin.stevenpiano.ui.components.GlassPopover
 import dev.stevenjin.stevenpiano.ui.components.MenuChoice
 
 /**
- * The Playlists listing's header row (DESIGN.md › v1.10.1, D6), below the channels' row: the eyebrow
+ * The Playlists listing's header row (DESIGN.md › v1.10.1, D6), its first line (v1.37 — M73: above the channels' row): the eyebrow
  * PLAYLISTS at its start, and at its end a pop-up button that shows the order chosen, "Newest first" (the
  * default) or "Name", and opens the two on the menus' glass with a checkmark on the current one. HIG
  * `pop-up-buttons.md`: a flat list of mutually exclusive options, a useful default selection;

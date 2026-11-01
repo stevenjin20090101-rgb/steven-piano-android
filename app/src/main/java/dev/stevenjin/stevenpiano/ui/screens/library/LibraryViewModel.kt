@@ -49,10 +49,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** The chips, Synthesia-style. */
+/** The chips, Synthesia-style; Playlists first, where the Library opens (v1.37 — M73), then the rest as before. */
 enum class Category(private val word: String) {
-    All("Pieces"),
     Playlists("Playlists"),
+    All("Pieces"),
     Composers("Composers"),
     Favorites("Favorites"),
     Recent("Recent"),
@@ -91,7 +91,7 @@ sealed interface Listing {
         override val isEmpty: Boolean get() = pieces.isEmpty()
     }
 
-    /** The playlists' grid in the [sort] chosen, under the channels' row ([channels]; none while a search narrows the list). */
+    /** The playlists' grid in the [sort] chosen, above the channels' row (v1.37 — M73; [channels]: none while a search narrows the list). */
     data class Playlists(
         val playlists: List<PlaylistSummary>,
         val channels: List<ChannelSummary> = emptyList(),
@@ -115,7 +115,7 @@ sealed interface Listing {
 }
 
 data class LibraryState(
-    val category: Category = Category.All,
+    val category: Category = Category.Playlists,
     val group: Group? = null,
     val listing: Listing = Listing.Pieces(emptyList()),
     /** Every piece's count, whatever the genre shown. */
@@ -196,7 +196,7 @@ class LibraryViewModel(
                 Log.w(TAG, "The Library's genre couldn't be read", e)
                 LibraryScope.All
             }
-            selection.update { it ?: Selection(Category.All, null, remembered) }
+            selection.update { it ?: Selection(Category.Playlists, null, remembered) }   // v1.37 — M73: the Library opens on Playlists
         }
     }
 
@@ -238,7 +238,7 @@ class LibraryViewModel(
      */
     fun selectScope(scope: LibraryScope) {
         if (selection.value?.scope == scope) return
-        selection.update { (it ?: Selection(Category.All, null)).copy(group = null, scope = scope) }
+        selection.update { (it ?: Selection(Category.Playlists, null)).copy(group = null, scope = scope) }
         write { saveScope(scope) }
     }
 
@@ -333,7 +333,7 @@ class LibraryViewModel(
                 Category.All -> (if (key.isEmpty()) library.all(scope) else library.search(query, scope)).map { Listing.Pieces(it) }
                 Category.Favorites -> library.favorites(scope).map { Listing.Pieces(it.matching(key)) }
                 Category.Recent -> library.recent(scope).map { Listing.Pieces(it.matching(key)) }
-                // The channels' row stands above the playlists; a search narrows the playlists alone. Their order is the
+                // The channels' row stands under the playlists (v1.37 — M73); a search narrows the playlists alone. Their order is the
                 // person's choice (v1.10.1 — M28, D6); the built-in lists' order is read off the main thread.
                 Category.Playlists -> combine(library.playlists(scope), channels, playlistSort) { all, cards, sort ->
                     Listing.Playlists(

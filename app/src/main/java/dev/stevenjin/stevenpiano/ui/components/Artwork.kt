@@ -47,7 +47,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.stevenjin.stevenpiano.data.art.ArtLayer
 import dev.stevenjin.stevenpiano.data.art.ArtSize
+import dev.stevenjin.stevenpiano.data.art.ArtworkPolicy
+import dev.stevenjin.stevenpiano.data.art.CoverRule
+import dev.stevenjin.stevenpiano.data.art.CoverStyle
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PieceHead
 import dev.stevenjin.stevenpiano.graph
@@ -243,11 +247,12 @@ private fun mosaicIndex(row: Int, column: Int, count: Int): Int =
 /**
  * A composer's art: their portrait, else the mosaic of their pieces' roll cards, else (no pieces
  * to draw) the monogram of [name]. Unframed ([framed] false) it fills a cell of something else's
- * frame, as on a channel's card.
+ * frame, as on a channel's card. Without [photo] (v1.37 — M73: an artist of Steven's K-pop on a channel's card) the
+ * portrait is never shown, only the mosaic.
  */
 @Composable
-fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true) {
-    ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { frame ->
+fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, photo: Boolean = true) {
+    val mosaic: @Composable (Modifier) -> Unit = { frame ->
         val artwork = LocalContext.current.graph.artwork
         val ids by produceState(artwork.peekMosaic(composerKey), composerKey) { value = artwork.mosaicPieces(composerKey) }
         when {
@@ -256,6 +261,7 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
             else -> MosaicTile(ids!!, frame, framed, size)
         }
     }
+    if (photo) ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed, fallback = mosaic) else mosaic(modifier)
 }
 
 /**
@@ -263,42 +269,129 @@ fun ComposerArt(composerKey: String, name: String, size: ArtSize, modifier: Modi
  * display mode's backdrop, the piece sheet, every piece's row since v1.15 — M40): its own cover first (cropped
  * about its centre: v1.12 — M30, a Studio piece's, drawn from its music; v1.15 — M40, an album cover from Apple's
  * catalogue or one chosen by hand), then its composer's portrait, else its own roll card, which is never mistaken
- * for another piece's, else ([title] given) its title's monogram.
+ * for another piece's, else ([title] given) its title's monogram. A song of Steven's K-pop or House & Dance follows
+ * the covers' rule (v1.37 — M73, [rememberArtLayers]): never the artist's photo.
  * [composerKey] is the library's ("" when the composer is unknown). Unframed ([framed] false) it fills
  * [modifier]'s box, cropped.
  */
 @Composable
 fun PieceArt(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier = Modifier, framed: Boolean = true, title: String? = null) {
-    ArtworkImage(ArtworkEntity.forPiece(pieceId), size, modifier, framed, alignment = Alignment.Center) { frame ->
-        ArtworkImage(ArtworkEntity.forComposer(composerKey), size, frame, framed) { RollCardImage(pieceId, it, framed, title) }
+    val layers = rememberArtLayers(pieceId)
+    val portrait = ArtLayer.Portrait in layers
+    if (ArtLayer.OwnCover in layers) {
+        ArtworkImage(ArtworkEntity.forPiece(pieceId), size, modifier, framed, alignment = Alignment.Center) { frame ->
+            BehindCover(pieceId, composerKey, size, frame, framed, title, portrait)
+        }
+    } else {
+        BehindCover(pieceId, composerKey, size, modifier, framed, title, portrait)
     }
+}
+
+/** What a piece shows without a cover of its own: its composer's portrait when [portrait], else its roll card. */
+@Composable
+private fun BehindCover(pieceId: Long, composerKey: String, size: ArtSize, modifier: Modifier, framed: Boolean, title: String?, portrait: Boolean) {
+    if (portrait) {
+        ArtworkImage(ArtworkEntity.forComposer(composerKey), size, modifier, framed) { RollCardImage(pieceId, it, framed, title) }
+    } else {
+        RollCardImage(pieceId, modifier, framed, title)
+    }
+}
+
+/**
+ * What piece [pieceId]'s art may be, in order (v1.37 — M73, [CoverRule.layers]): a song of Steven's K-pop its roll card
+ * (its cover only when chosen by hand), one of his House & Dance its album cover then its roll card, any other its own
+ * cover, its composer's portrait, its roll card. No portrait until the library has said which songs those are.
+ */
+@Composable
+fun rememberArtLayers(pieceId: Long): List<ArtLayer> {
+    val styles by LocalContext.current.graph.artwork.coverStyles.collectAsStateWithLifecycle()
+    val style = styles.of(pieceId)
+    val chosen = if (style == CoverStyle.Plain) ArtworkPolicy.chosenByHand(rememberArtworkRow(ArtworkEntity.forCover(pieceId))) else false
+    return CoverRule.layers(style, chosen, styles.read)
 }
 
 /**
  * A playlist's cover: the person's photo; else, when its first piece has a cover of its own (v1.14 —
  * M37: Recordings, Made in Studio), the covers among its first four pieces ([Mosaic]: one fills the
  * frame, two stand as a checkerboard, three or four fill the cells); else the portrait of its first
- * piece's composer; else the monogram of [name].
+ * piece's composer; else the monogram of [name]. Steven's K-pop and House & Dance (v1.37 — M73, [CoverRule.playlistStyle])
+ * never show a portrait: K-pop the roll cards of its first four pieces, House & Dance its first four album covers.
  */
 @Composable
 fun PlaylistCover(playlistId: Long, name: String, size: ArtSize, modifier: Modifier = Modifier) {
     ArtworkImage(ArtworkEntity.forPlaylist(playlistId), size, modifier) { frame ->
-        val library = LocalContext.current.graph.library
-        val head by remember(playlistId) { library.playlistHead(playlistId).map { Head(it) } }
-            .collectAsStateWithLifecycle(initialValue = null)
-        val pieces = head?.pieces
-        // Followed as the artwork changes: the start draws the older recordings' covers while the tile shows.
-        val covered = pieces.orEmpty().filter { piece -> key(piece.id) { rememberArtworkRow(ArtworkEntity.forPiece(piece.id))?.imagePath != null } }
-        when {
-            pieces == null -> ArtFrame(frame)
-            pieces.isEmpty() -> MonogramTile(name, frame)
-            covered.firstOrNull()?.id == pieces.first().id -> ArtFrame(frame) {
-                Mosaic(covered.size, Modifier.fillMaxSize()) { i, cell -> PieceCell(covered[i].id, size, cell) }
-            }
-            else -> ArtworkImage(ArtworkEntity.forComposer(pieces.first().composerKey), size, frame) { MonogramTile(name, it) }
+        when (CoverRule.playlistStyle(name)) {
+            CoverStyle.Plain -> PlainPlaylistCover(playlistId, name, frame)
+            CoverStyle.Album -> AlbumPlaylistCover(playlistId, name, size, frame)
+            CoverStyle.Usual -> UsualPlaylistCover(playlistId, name, size, frame)
         }
     }
 }
+
+/** A playlist's cover by the usual rule ([PlaylistCover]). */
+@Composable
+private fun UsualPlaylistCover(playlistId: Long, name: String, size: ArtSize, modifier: Modifier) {
+    val pieces = rememberPlaylistHead(playlistId, MOSAIC_CELLS)
+    // Followed as the artwork changes: the start draws the older recordings' covers while the tile shows.
+    val covered = pieces.orEmpty().filter { piece -> key(piece.id) { rememberArtworkRow(ArtworkEntity.forPiece(piece.id))?.imagePath != null } }
+    when {
+        pieces == null -> ArtFrame(modifier)
+        pieces.isEmpty() -> MonogramTile(name, modifier)
+        covered.firstOrNull()?.id == pieces.first().id -> ArtFrame(modifier) {
+            Mosaic(covered.size, Modifier.fillMaxSize()) { i, cell -> PieceCell(covered[i].id, size, cell) }
+        }
+        else -> ArtworkImage(ArtworkEntity.forComposer(pieces.first().composerKey), size, modifier) { MonogramTile(name, it) }
+    }
+}
+
+/** K-pop's cover (v1.37 — M73): the plain one, its first four pieces' roll cards two by two; the monogram while it is empty. */
+@Composable
+private fun PlainPlaylistCover(playlistId: Long, name: String, modifier: Modifier) {
+    val pieces = rememberPlaylistHead(playlistId, MOSAIC_CELLS)
+    when {
+        pieces == null -> ArtFrame(modifier)
+        pieces.isEmpty() -> MonogramTile(name, modifier)
+        else -> RollCardMosaic(pieces.map { it.id }, modifier)
+    }
+}
+
+/**
+ * House & Dance's cover (v1.37 — M73): the album covers of its first four pieces that have one, among its first
+ * [ALBUM_HEAD] ([Mosaic]: one fills the frame); none yet, the plain roll cards; empty, the monogram. Never a portrait.
+ */
+@Composable
+private fun AlbumPlaylistCover(playlistId: Long, name: String, size: ArtSize, modifier: Modifier) {
+    val pieces = rememberPlaylistHead(playlistId, ALBUM_HEAD)
+    val covered = pieces.orEmpty().filter { piece -> key(piece.id) { rememberArtworkRow(ArtworkEntity.forPiece(piece.id))?.imagePath != null } }
+        .take(MOSAIC_CELLS)
+    when {
+        pieces == null -> ArtFrame(modifier)
+        pieces.isEmpty() -> MonogramTile(name, modifier)
+        covered.isNotEmpty() -> ArtFrame(modifier) { Mosaic(covered.size, Modifier.fillMaxSize()) { i, cell -> PieceCell(covered[i].id, size, cell) } }
+        else -> RollCardMosaic(pieces.take(MOSAIC_CELLS).map { it.id }, modifier)
+    }
+}
+
+/** A playlist's first [limit] pieces in its order; null while they are read. */
+@Composable
+private fun rememberPlaylistHead(playlistId: Long, limit: Int): List<PieceHead>? {
+    val library = LocalContext.current.graph.library
+    val head by remember(playlistId, limit) { library.playlistHead(playlistId, limit).map { Head(it) } }
+        .collectAsStateWithLifecycle(initialValue = null)
+    return head?.pieces
+}
+
+/** [pieceIds]' roll cards two by two in a frame: the plain cover (v1.37 — M73), never a picture. */
+@Composable
+private fun RollCardMosaic(pieceIds: List<Long>, modifier: Modifier) {
+    ArtFrame(modifier) { Mosaic(pieceIds.size, Modifier.fillMaxSize()) { i, cell -> RollCard(pieceIds[i], cell) } }
+}
+
+/** A mosaic's cells. */
+private const val MOSAIC_CELLS = 4
+
+/** How far into House & Dance its cover looks for four album covers. */
+private const val ALBUM_HEAD = 24
 
 /** Loaded: a playlist's first pieces (none for an empty playlist). */
 private class Head(val pieces: List<PieceHead>)
