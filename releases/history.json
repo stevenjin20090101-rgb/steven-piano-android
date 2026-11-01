@@ -471,5 +471,16 @@
     "minSdk": 26,
     "tag": "v1.39",
     "publishedAt": "2026-11-01"
+  },
+  {
+    "versionCode": 51,
+    "versionName": "1.40",
+    "notes": "Safety: the full key test (every key played and listened to) now runs only after the power was cut for a fault; other safety checks are quick and silent. After a fault the piano stays off for a 25-minute cool-down (Skip the cool-down in Piano > Power plug, behind the PIN). Power trips now allow an 80 W leeway: only 80 W more than the notes and idle explain cuts the 24 V; the controller's own checks still cut at once.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.40/steven-piano-1.40.apk",
+    "sha256": "6e9b498ea873034c528b55b93808eb44d01e90faadc9f7e279369e343f216736",
+    "sizeBytes": 14524373,
+    "minSdk": 26,
+    "tag": "v1.40",
+    "publishedAt": "2026-11-01"
   }
 ]
