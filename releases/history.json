@@ -449,5 +449,16 @@
     "minSdk": 26,
     "tag": "v1.37",
     "publishedAt": "2026-11-01"
+  },
+  {
+    "versionCode": 49,
+    "versionName": "1.38",
+    "notes": "Power plug: the piano's controller runs off the plug, so Play now switches the plug on first, waits for the piano to start (up to 30 s), checks it, then plays from the start; no more silent pieces. The plug is never switched off while something is waiting to play. New: Piano > Power plug > Turn the piano on / off (turns itself off after 30 minutes with nothing played).",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.38/steven-piano-1.38.apk",
+    "sha256": "d1339f5a7876008bcd3f4596a49be4a0a6ad77342768701ed6a0d57ed768a6c8",
+    "sizeBytes": 14468609,
+    "minSdk": 26,
+    "tag": "v1.38",
+    "publishedAt": "2026-11-01"
   }
 ]
