@@ -119,6 +119,26 @@ this folder.
   come back), then enrol the new one; **Forget** removes a piano you no longer have.
 - **A new secret:** **Rotate secret** sends the connected tablet a new secret; once it has kept it,
   the old one stops working. Nothing to do on the tablet.
+- **A piano's name** (M79): the name you give it in the console (the piano's page › its name) is
+  its panel's title, for example "Steven Jin's Piano · Fessenden School". A connected tablet gets a
+  new name at once; one that is offline, when it next connects. While a piano is still "New piano",
+  its panel says "Steven Piano".
+
+### A school's short address (M79)
+
+A tiny third Worker, `playerpiano-stevenjin` (`wrangler.short.jsonc`, `src/short/index.ts`), gives
+one piano an address of its own: `https://playerpiano-stevenjin.<you>.workers.dev` sends every
+request on (302) to that piano's panel on the relay, so `/` opens the panel and `/request` the guest
+page. It has no bindings and keeps nothing. Until it names a piano it answers 503 "This piano isn't
+set up yet."
+
+1. Enrol the school's tablet (step 12) and copy its piano's id (12 letters) from the console.
+2. In `wrangler.short.jsonc`, set `"PIANO_ID"` to that id (`"RELAY_URL"` is the relay's address,
+   as in `wrangler.console.jsonc`).
+3. `npm run deploy:short`, then open `https://playerpiano-stevenjin.<you>.workers.dev`.
+
+Another school: copy `wrangler.short.jsonc` to a new file with its own `"name"` (the address) and
+`"PIANO_ID"`, and deploy it with `npx wrangler deploy -c <that file>`.
 
 ## Local development (no Cloudflare account)
 
@@ -157,8 +177,9 @@ The protocol (`steven-piano-relay-1`) is in `src/shared/protocol.ts`, and the ap
 `RelayProtocol.kt` speaks the same:
 
 - The tablet connects to `wss://<relay>/tablet` with `Authorization: Bearer <piano>.<secret>`; the
-  room checks the secret's SHA-256 against the database and says `hello`. The tablet sends its
-  `status` every 30 seconds and after a change.
+  room checks the secret's SHA-256 against the database and says `hello`, with the piano's name
+  (M79). The tablet sends its `status` every 30 seconds and after a change. A rename in the console
+  reaches it as `name`.
 - A browser's request to `/p/<piano>/…` becomes a `req` (the prefix taken off; only `Host`,
   `Cookie`, `Origin`, `Content-Type`, `Content-Length`, `X-Steven-Piano` and `Accept` passed on, and
   the browser's address from `CF-Connecting-IP`), its body in 64 KB binary chunks never more than
@@ -211,11 +232,12 @@ it until a tablet is enrolled.
 
 ## Files
 
-- `wrangler.relay.jsonc`, `wrangler.console.jsonc`: the two Workers; `migrations/0001_init.sql`: the
-  database.
+- `wrangler.relay.jsonc`, `wrangler.console.jsonc`: the two Workers; `wrangler.short.jsonc`: a
+  school's short address (M79); `migrations/0001_init.sql`: the database.
 - `src/shared/`: the protocol, ids and codes, hashing, the database's shapes, HTTP answers.
 - `src/relay/`: the relay Worker (`index.ts`), enrolment (`enrol.ts`), the room (`room.ts`), the
   offline page (`offline.ts`).
 - `src/console/`: the console Worker (`index.ts`, `routes.ts`) and its Access check (`access.ts`);
   `console/static/`: its page.
+- `src/short/`: the short address's Worker (M79).
 - `test/`: the tests; `tools/dev.mjs` (`npm run dev`) and `tools/fake-tablet.mjs`.

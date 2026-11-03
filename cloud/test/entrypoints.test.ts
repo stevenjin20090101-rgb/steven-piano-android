@@ -10,11 +10,13 @@
 import { describe, expect, it } from 'vitest';
 import * as consoleWorker from '../src/console/index';
 import * as relayWorker from '../src/relay/index';
+import * as shortWorker from '../src/short/index';
 
 // workerd takes every export of a Worker's main module for an entrypoint: anything else stops it.
 describe("the Workers' main modules", () => {
   it('export only their handlers (and the relay its Durable Object)', () => {
     expect(Object.keys(relayWorker).sort()).toEqual(['PianoRoom', 'default']);
     expect(Object.keys(consoleWorker)).toEqual(['default']);
+    expect(Object.keys(shortWorker)).toEqual(['default']);
   });
 });

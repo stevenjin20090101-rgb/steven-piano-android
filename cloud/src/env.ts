@@ -34,3 +34,11 @@ export interface ConsoleEnv {
   /** "1" lets `wrangler dev` skip Access, and only for a request to localhost (never set in the config). */
   DEV_BYPASS?: string;
 }
+
+/** A school's short address (wrangler.short.jsonc, M79): no bindings, two vars. */
+export interface ShortEnv {
+  /** The relay's https address, as the console's RELAY_URL. */
+  RELAY_URL?: string;
+  /** The piano whose panel it opens; empty until its tablet is enrolled. */
+  PIANO_ID?: string;
+}
