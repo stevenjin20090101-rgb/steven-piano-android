@@ -14,7 +14,9 @@
  * - `wss://<relay>/tablet`, `Authorization: Bearer <pianoId>.<secret>`, subprotocol
  *   [SUBPROTOCOL]. Text frames are JSON of at most [MAX_TEXT_FRAME] bytes; binary frames are
  *   `id: u32 big-endian | kind: u8 | payload` of at most [CHUNK] bytes ([Kind]).
- * - The room says `hello` on accept; the tablet sends `status` every 30 s and after changes.
+ * - The room says `hello` on accept (with the piano's name from the console since M79); the tablet
+ *   sends `status` every 30 s and after changes. A rename in the console reaches a connected tablet
+ *   at once as `name` (M79).
  * - A browser's request is `req` (+ `req.chunk`s under a credit window, then `req.end`); the answer
  *   is `res` + `res.chunk`s + `res.end`. `req.credit` grants more body; `req.abort` gives up.
  * - A browser's socket is bridged: `ws.open` → `ws.accept` | `ws.refuse`, `ws.text`, `ws.close`.
@@ -106,11 +108,22 @@ export function decodeFrame(data: ArrayBuffer | ArrayBufferView): Frame | null {
 export interface Hello {
   t: 'hello';
   pianoId: string;
+  /** M79: the piano's name in the console (`pianos.name`), for the panel; null while it has none of its own ([DEFAULT_NAME]). */
+  name: string | null;
   host: string;
   prefix: string;
   caps: { maxBody: number; chunk: number; window: number };
   at: number;
 }
+
+/** M79: the console renamed the piano; null when it has no name of its own. Older tablets drop it (an unknown `t`). */
+export interface NameMessage {
+  t: 'name';
+  name: string | null;
+}
+
+/** The most a piano's name is: the console's limit. */
+export const MAX_PIANO_NAME = 60;
 
 export interface ReqMessage {
   t: 'req';

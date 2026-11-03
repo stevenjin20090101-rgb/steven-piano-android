@@ -12,6 +12,7 @@ import { API_CSP, SECURITY_HEADERS, HSTS } from '../shared/http';
 /**
  * The page a browser gets for a piano whose tablet isn't connected (503): the panel's own paper and
  * ink, no script, and a look again every 30 seconds. Its one inline style is allowed by its hash.
+ * M79: it carries the piano's name from the console when the room knows it, else "Steven Piano".
  */
 
 const STYLE = `
@@ -35,19 +36,30 @@ p { margin: 0; max-width: 32em; }
 .dot { display: inline-block; width: 8px; height: 8px; border: 1.5px solid var(--tertiary); border-radius: 50%; }
 `;
 
-const PAGE = `<!doctype html>
+/** The page's name when the piano has none of its own (the panel's own default). */
+const DEFAULT_TITLE = 'Steven Piano';
+
+/** [value] safe inside HTML text. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/** The offline page for a piano called [name] (null: "Steven Piano"). */
+export function offlinePage(name: string | null = null): string {
+  const shown = escapeHtml(name ?? DEFAULT_TITLE);
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta http-equiv="refresh" content="30">
-<title>Steven Piano · offline</title>
+<title>${shown} · offline</title>
 <style>${STYLE}</style>
 </head>
 <body>
 <main>
-<p class="eyebrow">Steven Piano</p>
+<p class="eyebrow">${shown}</p>
 <h1>The piano is offline</h1>
 <p class="note">Its tablet isn't connected just now. This page looks again every 30 seconds.</p>
 <p class="meta"><span class="dot" aria-hidden="true"></span>Offline</p>
@@ -55,6 +67,7 @@ const PAGE = `<!doctype html>
 </body>
 </html>
 `;
+}
 
 let styleHash: Promise<string> | null = null;
 
@@ -71,8 +84,8 @@ export async function offlineCsp(): Promise<string> {
   return `default-src 'none'; style-src 'sha256-${await styleHash}'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`;
 }
 
-/** 503 for a piano whose tablet isn't here: JSON for the API (and anything not a page), the page for a page. */
-export async function offline(api: boolean, method: string): Promise<Response> {
+/** 503 for a piano whose tablet isn't here: JSON for the API (and anything not a page), the page for a page (named [name]). */
+export async function offline(api: boolean, method: string, name: string | null = null): Promise<Response> {
   const headers = new Headers({ 'Cache-Control': 'no-store', 'Retry-After': '30' });
   for (const [name, value] of SECURITY_HEADERS) headers.set(name, value);
   headers.set(HSTS[0], HSTS[1]);
@@ -83,7 +96,8 @@ export async function offline(api: boolean, method: string): Promise<Response> {
   }
   headers.set('Content-Type', 'text/html; charset=utf-8');
   headers.set('Content-Security-Policy', await offlineCsp());
-  return new Response(method === 'HEAD' ? null : PAGE, { status: 503, headers });
+  return new Response(method === 'HEAD' ? null : offlinePage(name), { status: 503, headers });
 }
 
-export const OFFLINE_PAGE = PAGE;
+/** The page with no name of the piano's own. */
+export const OFFLINE_PAGE = offlinePage();

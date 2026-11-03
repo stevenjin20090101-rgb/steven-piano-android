@@ -21,6 +21,7 @@ describe('forwarding a browser request to the tablet', () => {
     expect(hello).toEqual({
       t: 'hello',
       pianoId,
+      name: 'Test piano',
       host: 'relay.test',
       prefix: `/p/${pianoId}`,
       caps: { maxBody: 104857600, chunk: 65536, window: 1048576 },

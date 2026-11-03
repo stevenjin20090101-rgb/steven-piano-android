@@ -9,7 +9,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import type { RelayEnv } from '../env';
-import { auditStatement } from '../shared/db';
+import { auditStatement, panelName } from '../shared/db';
 import { constantTimeEqual, sha256Hex } from '../shared/hash';
 import { PIANO_ID, PENDING_LIFE_MS, newSecret, randomU32 } from '../shared/ids';
 import { API_CSP, error, withSecurity } from '../shared/http';
@@ -34,6 +34,7 @@ import {
   sanitizeStatus,
   text,
   type Hello,
+  type NameMessage,
   type ReqMessage,
   type TabletStatus,
 } from '../shared/protocol';
@@ -144,6 +145,8 @@ export class PianoRoom extends DurableObject<RelayEnv> {
 
   private stored: Stored = { status: null, statusAt: null, lastD1Write: 0 };
   private storedPianoId: string | null = null;
+  /** M79: the piano's name as its tablet was last told it (null: none of its own), kept for the offline page. */
+  private name: string | null = null;
   private nextId = randomU32();
   private readonly pending = new Map<number, Pending>();
   /** Requests over lately: their late frames are dropped without a `req.abort`. */
@@ -165,6 +168,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       const stored = await ctx.storage.get<Stored>('state');
       if (stored) this.stored = stored;
       this.storedPianoId = (await ctx.storage.get<string>('pianoId')) ?? null;
+      this.name = (await ctx.storage.get<string>('name')) ?? null;
     });
   }
 
@@ -296,7 +300,26 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     await this.ctx.storage.deleteAll();
     this.stored = { status: null, statusAt: null, lastD1Write: 0 };
     this.storedPianoId = null;
+    this.name = null;
     return { ok: true, message: 'Forgotten.' };
+  }
+
+  /**
+   * M79: the console renamed the piano (D1 has the new [name] already): a connected tablet is told at once (`name`),
+   * and the offline page uses it from now on. A tablet not connected learns it from its next hello.
+   */
+  async renamed(pianoId: string, name: string): Promise<void> {
+    this.pianoId(pianoId);
+    const shown = panelName(name);
+    await this.keepName(shown);
+    const tablet = this.tablet();
+    if (!tablet) return;
+    const message: NameMessage = { t: 'name', name: shown };
+    try {
+      tablet.send(JSON.stringify(message));
+    } catch {
+      // Closing: the next hello carries the name.
+    }
   }
 
   // ---- The tablet ----------------------------------------------------------------------------------
@@ -310,9 +333,9 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     const hash = h.get('x-relay-secret-hash') ?? '';
     const now = this.now();
     const epoch = this.authEpoch;
-    const row = await this.env.DB.prepare('SELECT secret_hash, pending_secret_hash, pending_until FROM pianos WHERE id = ?')
+    const row = await this.env.DB.prepare('SELECT secret_hash, pending_secret_hash, pending_until, name FROM pianos WHERE id = ?')
       .bind(pianoId)
-      .first<{ secret_hash: string | null; pending_secret_hash: string | null; pending_until: number | null }>();
+      .first<{ secret_hash: string | null; pending_secret_hash: string | null; pending_until: number | null; name: string | null }>();
     const current = !!row?.secret_hash && constantTimeEqual(hash, row.secret_hash);
     const pending = !current && !!row?.pending_secret_hash && (row.pending_until ?? 0) > now && constantTimeEqual(hash, row.pending_secret_hash);
     if (!row || (!current && !pending)) return error(401, 'auth', "This tablet isn't enrolled here, or its access was revoked.");
@@ -341,13 +364,16 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     this.ctx.acceptWebSocket(server, ['tablet']);
     const attachment: TabletAttachment = { role: 'tablet', pianoId, session: randomU32(), connectedAt: now };
     server.serializeAttachment(attachment);
+    const name = panelName(row.name);
     if (this.storedPianoId !== pianoId) {
       this.storedPianoId = pianoId;
       await this.ctx.storage.put('pianoId', pianoId);
     }
+    await this.keepName(name);
     const hello: Hello = {
       t: 'hello',
       pianoId,
+      name,
       host: this.env.PUBLIC_HOST || h.get('x-relay-host') || '',
       prefix: `/p/${pianoId}`,
       caps: { maxBody: this.maxBody(), chunk: CHUNK, window: WINDOW },
@@ -516,7 +542,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
     const path = h.get('x-relay-path') ?? '/';
     const api = path === '/api' || path.startsWith('/api/');
     const tablet = this.tablet();
-    if (!tablet) return offline(api, request.method);
+    if (!tablet) return offline(api, request.method, this.name);
     const length = Number(h.get('x-relay-length') ?? '0');
     const hasBody = request.body !== null && length > 0;
     const upload = length > UPLOAD_OVER;
@@ -530,7 +556,7 @@ export class PianoRoom extends DurableObject<RelayEnv> {
       const current = this.tablet();
       if (!current) {
         this.release();
-        return offline(api, request.method);
+        return offline(api, request.method, this.name);
       }
       const headers: Record<string, string> = {};
       for (const name of FORWARDED_HEADERS) {
@@ -956,6 +982,14 @@ export class PianoRoom extends DurableObject<RelayEnv> {
 
   private now(): number {
     return this.clock();
+  }
+
+  /** M79: the piano's name for the offline page, in storage too (it outlives an eviction); written only when it changes. */
+  private async keepName(name: string | null): Promise<void> {
+    if (name === this.name) return;
+    this.name = name;
+    if (name === null) await this.ctx.storage.delete('name');
+    else await this.ctx.storage.put('name', name);
   }
 
   private maxBody(): number {

@@ -7,10 +7,19 @@
    Authorship provenance (Ed25519 fingerprint): eab16a502f679465  - see PROVENANCE.md
    ============================================================================ */
 
-import type { TabletStatus } from './protocol';
+import { MAX_PIANO_NAME, text, type TabletStatus } from './protocol';
 
 /** The name the console gives a piano until the tablet or the owner names it. */
 export const DEFAULT_NAME = 'New piano';
+
+/**
+ * M79: a piano's name as its tablet and its panel are told it: `pianos.name` cleaned and cut to [MAX_PIANO_NAME], or null
+ * while it is still [DEFAULT_NAME] (the panel says "Steven Piano" then, not "New piano").
+ */
+export function panelName(name: unknown): string | null {
+  const clean = text(name, MAX_PIANO_NAME);
+  return clean === null || clean === DEFAULT_NAME ? null : clean;
+}
 
 /** The database both Workers share (migrations/0001_init.sql), and what they read and write in it. */
 

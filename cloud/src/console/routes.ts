@@ -135,6 +135,12 @@ async function rename(request: Request, env: ConsoleEnv, row: PianoRow, now: num
     env.DB.prepare('UPDATE pianos SET name = ? WHERE id = ?').bind(name, row.id),
     auditStatement(env.DB, { at: now, actor, pianoId: row.id, action: 'rename', detail: { from: row.name, to: name } }),
   ]);
+  // M79: a connected tablet hears the new name at once (its panel's title); the rename stands even if the relay doesn't answer.
+  try {
+    await env.ROOMS.getByName(row.id).renamed(row.id, name);
+  } catch {
+    // The tablet learns it from its next hello.
+  }
   return json(200, { piano: pianoView({ ...row, name }, now) });
 }
 
