@@ -493,5 +493,16 @@
     "minSdk": 26,
     "tag": "v1.42",
     "publishedAt": "2026-11-03"
+  },
+  {
+    "versionCode": 54,
+    "versionName": "1.43",
+    "notes": "Album covers for the modern songs come with the song zip.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.43/steven-piano-1.43.apk",
+    "sha256": "48c7ae8e2da237945cb0605a08346161b4d677b0fa97de2378120c7c20f92a7c",
+    "sizeBytes": 14526925,
+    "minSdk": 26,
+    "tag": "v1.43",
+    "publishedAt": "2026-11-03"
   }
 ]
