@@ -84,7 +84,7 @@
 
 <main id="gate" class="gate" hidden>
   <div class="gate-card">
-    <p class="eyebrow">Steven Piano</p>
+    <p class="eyebrow" data-piano-name>Steven Piano</p>
     <h1 class="display">Enter the PIN</h1>
     <p class="note">The six digits set on the tablet, in Piano › Web panel. Enter it once: this device stays signed in for 90 days.</p>
     <form id="gate-form" class="gate-form" novalidate>
@@ -97,7 +97,7 @@
 
 <main id="offline" class="gate" hidden>
   <div class="gate-card">
-    <p class="eyebrow">Steven Piano</p>
+    <p class="eyebrow" data-piano-name>Steven Piano</p>
     <h1 class="display">The piano is offline</h1>
     <p class="note">Its tablet isn't connected just now. This page looks again every few seconds.</p>
     <p class="connection"><span class="dot"></span><span>Offline</span></p>
@@ -122,7 +122,7 @@
     <div class="rail-card glass">
       <div class="identity">
         <img class="mark" src="favicon.svg" alt="" width="24" height="24">
-        <p class="piano-name">Steven Piano</p>
+        <p class="piano-name" data-piano-name>Steven Piano</p>
         <span class="dot" id="conn-dot" role="img" aria-label="Connecting"></span>
         <p class="status-pill" id="conn-pill" role="status" aria-live="polite" hidden></p>
       </div>

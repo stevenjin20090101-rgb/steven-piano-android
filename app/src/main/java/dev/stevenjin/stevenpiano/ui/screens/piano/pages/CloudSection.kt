@@ -86,7 +86,8 @@ const val GET_A_CODE = "Get a code from the console"
  * The Web panel page's OVER THE INTERNET section (CLOUD until v1.13; DESIGN.md › v1.10 — M26, Steven Piano
  * Cloud): **Web panel over the internet** (a switch, disabled with "Set a PIN first" until the panel has a
  * PIN and "Enrol this tablet first" until it is enrolled) and under it, while it is on, how the connection
- * stands ([CloudLine]); the panel's public link with its QR at 96 dp (a tap shows it large); **Relay
+ * stands ([CloudLine]); the panel's public link with its QR at 96 dp (a tap shows it large); once enrolled, the
+ * piano's name in the console in one quiet line (M79: the panel's title, [CloudCopy.named]); **Relay
  * address** (the relay's host as typed, or "Not set"); **Enrol with code** ([EnrolSheet]); and, once
  * enrolled, **Forget this cloud** after a confirmation. In kiosk mode the whole page waits behind the
  * kiosk's PIN, as every settings page does.
@@ -117,6 +118,12 @@ fun CloudSection(settings: PianoSettings, vm: PianoViewModel) {
         // The link while it can lead somewhere: not once the console has revoked or removed this tablet, or its key is gone.
         if (cloud !is CloudStatus.Revoked && cloud !is CloudStatus.Disabled && cloud !is CloudStatus.NotEnrolled) {
             vm.cloudLink(settings, cloud)?.let { link -> LinkRow(link, onShowLarge = { largeQr = true }) }
+        }
+    }
+    if (settings.cloudEnrolled) {
+        settings.cloudPianoName?.let { name ->
+            NoteLine(CloudCopy.named(name))
+            HairlineDivider(startInset = 16.dp)
         }
     }
     Anchored(PageRows.RELAY_ADDRESS.anchor) {
@@ -333,6 +340,9 @@ object CloudCopy {
     const val ABOUT = "The web panel over the internet is off unless you turn it on. Then your own relay carries the panel's pages " +
         "and requests, and every 30 s the app's and the piano's versions, whether the piano is connected, what plays, the guests' " +
         "switches, whether the web panel is on, the library's size and the channels' names. Never a device identifier."
+
+    /** M79: the piano's name in the console, as the panel shows it. */
+    fun named(name: String): String = "The panel shows this piano as $name, its name in the console"
 
     /** The status line under the switch; [now] counts a wait down. */
     fun line(status: CloudStatus, now: Long): String = when (status) {

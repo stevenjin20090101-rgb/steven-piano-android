@@ -390,9 +390,26 @@ import { create as createStudio } from './studio.js';
   /** How often a page that opened while the piano was offline looks again (v1.10 — M26). */
   const OFFLINE_LOOK_MS = 10000;
 
+  /** The page's name until the state says the piano's own (M79), and on the tablet's own address when it has none. */
+  const DEFAULT_NAME = 'Steven Piano';
+  let shownName = DEFAULT_NAME;
+
+  /**
+   * M79: the piano's name in the console (the state's `web.name`, kept by the tablet from the relay) as the page's
+   * title, the rail's name and the eyebrows of the PIN and offline cards; "Steven Piano" without one.
+   */
+  function applyName(raw) {
+    const name = typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_NAME;
+    if (name === shownName) return;
+    shownName = name;
+    document.title = name;
+    for (const node of document.querySelectorAll('[data-piano-name]')) node.textContent = name;
+  }
+
   function onState(next) {
     const before = state;
     state = next;
+    applyName(next.web && next.web.name);
     sections.now.received(next);
     document.body.classList.toggle('mono', !!next.monochrome);
     document.body.classList.toggle('no-backdrop', next.albumBackdrop === false);   // Album colours off on the tablet (v1.15 — M41)

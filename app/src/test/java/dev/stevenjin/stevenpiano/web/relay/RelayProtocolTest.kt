@@ -60,6 +60,20 @@ class RelayProtocolTest {
         assertNull(RelayProtocol.decode(hello.copy(host = "evil.example/p").encode()))
         val odd = RelayProtocol.decode("""{"t":"hello","pianoId":"abcdefgh2345","host":"r.dev","prefix":"/p/abcdefgh2345","caps":{"chunk":999999,"window":5}}""") as RelayMessage.Hello
         assertEquals("caps out of range take the defaults", Caps(), odd.caps)
+        assertNull("no name: the panel says Steven Piano", odd.name)
+    }
+
+    @Test
+    fun `the piano's name comes with the hello and with a rename, and what isn't one is no name (M79)`() {
+        val hello = RelayProtocol.decode(
+            """{"t":"hello","pianoId":"abcdefgh2345","name":" Steven Jin's Piano · Fessenden School ","host":"r.dev","prefix":"/p/abcdefgh2345"}""",
+        ) as RelayMessage.Hello
+        assertEquals("Steven Jin's Piano · Fessenden School", hello.name)
+        assertEquals(RelayMessage.Name("Brooks Arts Center Piano"), RelayProtocol.decode("""{"t":"name","name":"Brooks Arts Center Piano"}"""))
+        assertEquals(RelayMessage.Name(null), RelayProtocol.decode("""{"t":"name","name":null}"""))
+        for (odd in listOf("\"\"", "\"   \"", "\"${"x".repeat(61)}\"", "\"a\\u0007b\"", "42", "{}")) {
+            assertEquals(odd, RelayMessage.Name(null), RelayProtocol.decode("""{"t":"name","name":$odd}"""))
+        }
     }
 
     @Test
@@ -115,6 +129,9 @@ class RelayProtocolTest {
     fun `every message reads back as it was written`() {
         val messages = listOf(
             RelayMessage.Hello("abcdefgh2345", "relay.example.dev", "/p/abcdefgh2345", Caps(), 5),
+            RelayMessage.Hello("abcdefgh2345", "relay.example.dev", "/p/abcdefgh2345", Caps(), 5, "Fessenden School"),
+            RelayMessage.Name("Fessenden School"),
+            RelayMessage.Name(null),
             RelayMessage.Req(1, "POST", "/api/login", "", mapOf("host" to "relay.example.dev", "content-type" to "application/json"), "203.0.113.9", "/p/abcdefgh2345", true),
             RelayMessage.ReqAbort(2),
             RelayMessage.ReqCredit(2, 70_000),

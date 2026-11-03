@@ -562,9 +562,10 @@ data class WebPiano(val state: WebPianoState, val statusText: String?, val statu
 /**
  * Where the panel and the request page are reached: `http://100.101.2.3:8737`, and the guests'
  * `…/request`; and (v1.10 — M26) the panel's public link through Steven Piano Cloud,
- * `https://<relay>/p/<id>/`, while remote access over the internet is on.
+ * `https://<relay>/p/<id>/`, while remote access over the internet is on. M79: the piano's [name] in the console
+ * while the tablet is enrolled ("Steven Jin's Piano · Fessenden School"), the panel's title; null: "Steven Piano".
  */
-data class WebAddresses(val panel: String?, val guest: String?, val cloud: String? = null)
+data class WebAddresses(val panel: String?, val guest: String?, val cloud: String? = null, val name: String? = null)
 
 /** Guests: whether they may ask, and whether a request waits for approval. */
 data class GuestSettings(val open: Boolean, val approveFirst: Boolean)

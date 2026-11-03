@@ -244,8 +244,11 @@ class WebApiTest {
         assertEquals("Safety check failed: 6 of 7 power boards answered", locked.getString("text"))
         assertTrue("Album colours behind the player, on until turned off (v1.15 — M41)", json.getBoolean("albumBackdrop"))
         // Steven Piano Cloud (v1.10 — M26): the public link beside the tablet's own addresses, null while remote access is off.
-        assertEquals(setOf("address", "guestAddress", "guests", "cloud"), json.getJSONObject("web").keys().asSequence().toSet())
+        assertEquals(setOf("address", "guestAddress", "guests", "cloud", "name"), json.getJSONObject("web").keys().asSequence().toSet())
         assertTrue(json.getJSONObject("web").isNull("cloud"))
+        assertTrue("M79: no name (not enrolled): the panel says Steven Piano", json.getJSONObject("web").isNull("name"))
+        val named = WebApi.state(state.copy(web = WebAddresses(null, null, name = "Steven Jin's Piano · Fessenden School")), pending = 0)
+        assertEquals("Steven Jin's Piano · Fessenden School", named.getJSONObject("web").getString("name"))
         val clouded = WebApi.state(state.copy(web = WebAddresses(null, null, "https://relay.example.dev/p/abcdefgh2345/")), pending = 0)
         assertEquals("https://relay.example.dev/p/abcdefgh2345/", clouded.getJSONObject("web").getString("cloud"))
         // Studio (v1.7 — M23): whether it runs here, its models and its jobs, the progress null when not running.

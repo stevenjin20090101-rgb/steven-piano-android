@@ -23,7 +23,8 @@ import java.math.BigInteger
  * - The tablet connects to `wss://<relay>/tablet` with `Authorization: Bearer <pianoId>.<secret>`
  *   and the subprotocol [SUBPROTOCOL]. Text frames are JSON of at most [MAX_TEXT] bytes; binary
  *   frames are [Frame]s, `id: u32 big-endian | kind: u8 | payload` of at most [MAX_CHUNK] bytes.
- * - The room says [RelayMessage.Hello] on accept; the tablet reports [RelayMessage.Status].
+ * - The room says [RelayMessage.Hello] on accept; the tablet reports [RelayMessage.Status]. M79: the
+ *   hello names the piano as the console does, and a rename there comes as [RelayMessage.Name].
  * - A browser's request is [RelayMessage.Req], its body [Frame.REQ_CHUNK]s under a credit window
  *   ([RelayMessage.ReqCredit]) then [Frame.REQ_END]; the answer is [RelayMessage.Res], then
  *   [Frame.RES_CHUNK]s and [Frame.RES_END]. [RelayMessage.ReqAbort]: the room gave up on it.
@@ -57,6 +58,9 @@ object RelayProtocol {
 
     /** How deeply a message's JSON may nest (a status is three deep). */
     const val MAX_DEPTH = 6
+
+    /** A piano's name, at most (the console's limit, M79). */
+    const val MAX_PIANO_NAME = 60
 
     /** Revoked from the console: the tablet stops trying. */
     const val CLOSE_REVOKED = 4401
@@ -162,6 +166,7 @@ object RelayProtocol {
         }
         "secret" -> (json.opt("secret") as? String)?.takeIf(SECRET::matches)?.let { RelayMessage.Secret(it) }
         "secret.ack" -> RelayMessage.SecretAck
+        "name" -> RelayMessage.Name(pianoName(json.opt("name")))
         "status" -> RelayMessage.Status(json)
         else -> null
     }
@@ -174,8 +179,15 @@ object RelayProtocol {
         val chunk = whole(caps?.opt("chunk"))?.takeIf { it in 1..MAX_CHUNK }?.toInt() ?: MAX_CHUNK
         val window = whole(caps?.opt("window"))?.takeIf { it in chunk..MAX_WINDOW }?.toInt() ?: DEFAULT_WINDOW
         val maxBody = whole(caps?.opt("maxBody"))?.takeIf { it > 0 } ?: DEFAULT_MAX_BODY
-        return RelayMessage.Hello(pianoId, host, prefix, Caps(maxBody, chunk, window), whole(json.opt("at")) ?: 0L)
+        return RelayMessage.Hello(pianoId, host, prefix, Caps(maxBody, chunk, window), whole(json.opt("at")) ?: 0L, pianoName(json.opt("name")))
     }
+
+    /**
+     * A piano's name as the relay gives it (M79): text, trimmed, 1 to [MAX_PIANO_NAME] characters, no control characters;
+     * anything else (absent, null, empty, too long, not text) is no name, and the panel says "Steven Piano".
+     */
+    fun pianoName(value: Any?): String? =
+        (value as? String)?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_PIANO_NAME && it.none(Char::isISOControl) }
 
     private fun req(json: JSONObject): RelayMessage.Req? {
         val id = id(json) ?: return null
@@ -305,12 +317,20 @@ data class Caps(val maxBody: Long = RelayProtocol.DEFAULT_MAX_BODY, val chunk: I
 sealed interface RelayMessage {
     fun encode(): String
 
-    /** The room, on accept: this piano's id, the host browsers use, the path prefix, what it allows, its time. */
-    data class Hello(val pianoId: String, val host: String, val prefix: String, val caps: Caps, val at: Long) : RelayMessage {
+    /**
+     * The room, on accept: this piano's id, the host browsers use, the path prefix, what it allows, its time, and (M79) the
+     * piano's [name] in the console (null: none of its own).
+     */
+    data class Hello(val pianoId: String, val host: String, val prefix: String, val caps: Caps, val at: Long, val name: String? = null) : RelayMessage {
         override fun encode(): String = JSONObject()
             .put("t", "hello").put("pianoId", pianoId).put("host", host).put("prefix", prefix)
             .put("caps", JSONObject().put("maxBody", caps.maxBody).put("chunk", caps.chunk).put("window", caps.window))
-            .put("at", at).toString()
+            .put("at", at).apply { if (name != null) put("name", name) }.toString()
+    }
+
+    /** M79: the piano was renamed in the console ([name]; null: none of its own). */
+    data class Name(val name: String?) : RelayMessage {
+        override fun encode(): String = JSONObject().put("t", "name").put("name", name ?: JSONObject.NULL).toString()
     }
 
     /**

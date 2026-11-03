@@ -420,7 +420,8 @@ object WebApi {
             .put(
                 "web",
                 JSONObject().put("address", s.web.panel ?: JSONObject.NULL).put("guestAddress", s.web.guest ?: JSONObject.NULL).put("guests", s.guests.open)
-                    .put("cloud", s.web.cloud ?: JSONObject.NULL),
+                    .put("cloud", s.web.cloud ?: JSONObject.NULL)
+                    .put("name", s.web.name ?: JSONObject.NULL),   // M79: the piano's name in the console, the panel's title (null: Steven Piano)
             )
             .put("monochrome", s.monochrome)
             .put("albumBackdrop", s.albumBackdrop)

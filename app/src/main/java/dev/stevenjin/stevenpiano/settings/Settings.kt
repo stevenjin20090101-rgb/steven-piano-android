@@ -191,6 +191,8 @@ data class PianoSettings(
     val cloudPianoId: String? = null,
     /** Whether a sealed relay secret is kept (whether it still opens is the relay client's to find). */
     val cloudSecretSet: Boolean = false,
+    /** M79: the piano's name in the console, as the relay last said it ("Steven Jin's Piano · Fessenden School"); null: none, or not enrolled. */
+    val cloudPianoName: String? = null,
     /** The version of Steven's library pack last loaded in full (v1.10 — M27); 0: never loaded. */
     val libraryPackVersion: Int = 0,
     /** The Playlists listing's order (v1.10.1 — M28, D6): newest first, or by name as before. */
@@ -442,6 +444,17 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         it[CLOUD_HOST] = host.take(MAX_HOST_NAME)
         it[CLOUD_PIANO_ID] = pianoId
         it[CLOUD_SECRET] = sealed
+        it.remove(CLOUD_PIANO_NAME)   // M79: the new enrolment's hello names it
+    }
+
+    /**
+     * M79: the piano's [name] as the relay said it (its hello, a rename in the console), kept only while [pianoId] is still
+     * the enrolment (a hello arriving after Forget this cloud, or for an older enrolment, keeps nothing); null removes it.
+     */
+    suspend fun setCloudPianoName(pianoId: String, name: String?) = edit {
+        if (it[CLOUD_PIANO_ID] != pianoId) return@edit
+        val kept = name?.trim()?.take(MAX_PIANO_NAME)?.takeIf(String::isNotEmpty)
+        if (kept == null) it.remove(CLOUD_PIANO_NAME) else it[CLOUD_PIANO_NAME] = kept
     }
 
     /** The relay's secret as kept (sealed), or null. Read on its own, never with [settings]. */
@@ -450,10 +463,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** A rotated secret (sealed) in place of the old one; null removes it. */
     suspend fun setCloudSecret(sealed: String?) = edit { if (sealed == null) it.remove(CLOUD_SECRET) else it[CLOUD_SECRET] = sealed }
 
-    /** Forget this cloud: the enrolment (the piano's id and its secret) goes and remote access turns off; the typed address stays for next time. */
+    /** Forget this cloud: the enrolment (the piano's id, its secret and, M79, its name) goes and remote access turns off; the typed address stays for next time. */
     suspend fun forgetCloud() = edit {
         it.remove(CLOUD_PIANO_ID)
         it.remove(CLOUD_SECRET)
+        it.remove(CLOUD_PIANO_NAME)
         it[CLOUD_ENABLED] = false
     }
 
@@ -590,6 +604,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             cloudHost = this[CLOUD_HOST],
             cloudPianoId = this[CLOUD_PIANO_ID]?.takeIf { PIANO_ID.matches(it) },
             cloudSecretSet = this[CLOUD_SECRET] != null,
+            cloudPianoName = this[CLOUD_PIANO_ID]?.let { this[CLOUD_PIANO_NAME] },
             libraryPackVersion = (this[LIBRARY_PACK_VERSION] ?: defaults.libraryPackVersion).coerceAtLeast(0),
             playlistSort = PlaylistSort.entries.firstOrNull { it.name == this[PLAYLIST_SORT] } ?: defaults.playlistSort,
             libraryScope = LibraryScope.entries.firstOrNull { it.name == this[LIBRARY_SCOPE] } ?: defaults.libraryScope,
@@ -670,6 +685,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val CLOUD_HOST = stringPreferencesKey("cloudHost")
         val CLOUD_PIANO_ID = stringPreferencesKey("cloudPianoId")
         val CLOUD_SECRET = stringPreferencesKey("cloudSecret")
+        val CLOUD_PIANO_NAME = stringPreferencesKey("cloudPianoName")
+
+        /** A piano's name as kept (M79): the console's limit. */
+        const val MAX_PIANO_NAME = 60
         val LIBRARY_PACK_VERSION = intPreferencesKey("libraryPackVersion")
         val PLAYLIST_SORT = stringPreferencesKey("playlistSort")
         val LIBRARY_SCOPE = stringPreferencesKey("libraryScope")

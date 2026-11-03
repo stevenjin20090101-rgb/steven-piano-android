@@ -279,6 +279,8 @@ class WebService : Service() {
             status = cloudStatus(),
             secrets = { secret -> withContext(Dispatchers.IO) { panel.cloudSecrets.keep(secret) } },
             scope = CoroutineScope(scope.coroutineContext + Dispatchers.IO),
+            // M79: the piano's name in the console, kept with the enrolment: the panel's title, the Remote page's line.
+            named = { pianoId, name -> graph.settingsRepository.setCloudPianoName(pianoId, name) },
             log = LinkLog::warn,
             online = { graph.network.isOnline() },
             userAgent = HttpFetch.USER_AGENT,

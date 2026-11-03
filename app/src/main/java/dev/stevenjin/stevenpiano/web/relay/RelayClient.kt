@@ -107,6 +107,7 @@ interface StatusSource {
  *   through the relay, the panel's own origin, the relay's host) and attached to the [hub] (at most
  *   four); what the hub sends goes out as `ws.text`.
  * - **Console commands** go to [commands]; **a new secret** to [secrets], acknowledged once kept.
+ * - **The piano's name** (M79), from every hello and every rename in the console, goes to [named] with the piano's id.
  * - **Status**: [status]'s report on hello, every [STATUS_EVERY_MS] and at most [statusSettleMs]
  *   after a change.
  *
@@ -125,6 +126,7 @@ class RelayClient(
     private val status: StatusSource,
     private val secrets: suspend (String) -> Boolean,
     private val scope: CoroutineScope,
+    private val named: suspend (pianoId: String, name: String?) -> Unit = { _, _ -> },
     private val client: OkHttpClient = defaultClient(),
     private val executor: ExecutorService = defaultExecutor(),
     private val clock: () -> Long = System::currentTimeMillis,
@@ -249,6 +251,9 @@ class RelayClient(
         }
     }
 
+    /** A piano's name from the room (M79); null: none of its own. */
+    private class PianoName(val name: String?)
+
     /** How a connection ended: the relay's close [code], or the handshake's [httpStatus]; [greeted] when a hello had come. */
     private data class End(val code: Int?, val httpStatus: Int?, val greeted: Boolean)
 
@@ -278,6 +283,9 @@ class RelayClient(
         private val members = ConcurrentHashMap<Long, WebSocketHub.Member>()
         private val jobs = mutableListOf<Job>()
         private val ended = AtomicBoolean(false)
+
+        /** The piano's latest name from the room (M79), kept one at a time and in order: only the latest matters. */
+        private val names = Channel<PianoName>(Channel.CONFLATED)
 
         fun close(code: Int, reason: String) {
             if (::socket.isInitialized) socket.close(code, reason)
@@ -309,6 +317,7 @@ class RelayClient(
                 is RelayMessage.WsClose -> members.remove(message.id)?.detach()
                 is RelayMessage.Cmd -> onCmd(message)
                 is RelayMessage.Secret -> onSecret(message)
+                is RelayMessage.Name -> if (hello != null) onName(message.name)
                 null -> log("Cloud: a message from the relay that isn't one was dropped")
                 else -> Unit   // the tablet's own kinds: never sent to it
             }
@@ -373,8 +382,20 @@ class RelayClient(
                 refusedCount.set(0)
             }
             _state.value = CloudStatus.Connected(message.host, message.pianoId, clock())
+            onName(message.name)
             if (!first) return
             log("Cloud: connected to ${message.host}")
+            launch {
+                for (latest in names) {
+                    try {
+                        named(cfg.pianoId, latest.name)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        log("Cloud: the piano's name couldn't be kept")
+                    }
+                }
+            }
             launch {
                 while (isActive) {
                     report()
@@ -507,6 +528,11 @@ class RelayClient(
                 send(RelayMessage.CmdResult(cmd.id, result.ok, result.message))
                 if (cmd.name == RelayCommands.STATUS) report()
             }
+        }
+
+        /** The piano's name from the room (M79): kept with the enrolment, for the panel, by the hello's own keeper. */
+        private fun onName(name: String?) {
+            names.trySend(PianoName(name))
         }
 
         private fun onSecret(message: RelayMessage.Secret) {

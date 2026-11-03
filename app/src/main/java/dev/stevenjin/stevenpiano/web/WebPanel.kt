@@ -93,7 +93,7 @@ class WebPanel(private val app: Context, private val graph: AppGraph) {
         AppWebBackend(
             app,
             graph,
-            addresses = { status.value.let { WebAddresses(it.panelUrl, it.guestUrl, cloudLink()) } },
+            addresses = { status.value.let { WebAddresses(it.panelUrl, it.guestUrl, cloudLink(), graph.settings.value.cloudPianoName) } },
             guests = { graph.settings.value.let { GuestSettings(open = it.webGuests, approveFirst = it.webApproveFirst) } },
             requested = { requests.requested.value },
             applyWebSettings = ::applyWebSettings,

@@ -55,6 +55,7 @@ class RelayClientTest {
     private val statusChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val commandsRun: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val kept: MutableList<String> = Collections.synchronizedList(mutableListOf())
+    private val names: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val waits: MutableList<Long> = Collections.synchronizedList(mutableListOf())
     private val clients = mutableListOf<RelayClient>()
 
@@ -113,6 +114,7 @@ class RelayClientTest {
             true
         },
         scope = scope,
+        named = { pianoId, name -> names += "$pianoId $name" },
         clock = { now },
         random = random,
         sleep = sleep,
@@ -173,6 +175,21 @@ class RelayClientTest {
         assertFalse("no answer", tablet.sent { it is RelayMessage.Res || it is RelayMessage.CmdResult || it is RelayMessage.Status })
         assertEquals("the request reached nothing", emptyList<String>(), backend.calls.toList())
         assertEquals(emptyList<String>(), commandsRun.toList())
+    }
+
+    @Test
+    fun `the piano's name from the hello and from a rename goes to be kept with the enrolment (M79)`() {
+        val client = newClient()
+        client.start()
+        val tablet = relay.next()
+        tablet.say(RelayMessage.Name("Too early"))   // before the hello: not this connection's yet
+        tablet.say(RelayMessage.Hello(PIANO, HOST, PREFIX, Caps(), 5, "Brooks Arts Center Piano"))
+        waitFor { names.size == 1 }
+        tablet.say(RelayMessage.Name("Steven Jin's Piano · Fessenden School"))
+        waitFor { names.size == 2 }
+        tablet.say(RelayMessage.Name(null))
+        waitFor { names.size == 3 }
+        assertEquals(listOf("$PIANO Brooks Arts Center Piano", "$PIANO Steven Jin's Piano · Fessenden School", "$PIANO null"), names.toList())
     }
 
     @Test

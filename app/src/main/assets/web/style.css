@@ -925,7 +925,7 @@ button, input, select { font: inherit; color: inherit; }
 /* The mark: the app's icon, 24 px with 6 px corners. */
 .mark { display: block; flex: none; width: 24px; height: 24px; border-radius: 6px; }
 
-.piano-name { min-width: 0; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -0.2px; }
+.piano-name { min-width: 0; overflow-wrap: anywhere; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -0.2px; }
 
 /* What is wrong, under the name: a quiet capsule of words; nothing while all is well. */
 .status-pill {
