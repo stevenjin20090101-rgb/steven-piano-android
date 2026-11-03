@@ -4020,3 +4020,20 @@ joins its row's playlist as a new piece would. The other earlier versions stay; 
 brings a new piece. Every import does this: Add zip, Add folder, the web panel, Steven's library. **The words**: the
 import bar "Imported 1,204 pieces, replaced 360 · in the playlist Pop." or "Replaced 360 pieces."; the web panel's
 tally "Imported 1,204 pieces · 360 replaced · 6 already there".
+
+# M79: each school's name
+
+Steven, 2026-11-02: a second, identical system goes into Fessenden School (its own piano, controller, plug and tablet),
+enrolled in the same Steven Piano Cloud as a second piano, and each school's panel should say whose it is. **The name
+is the console's**: the piano's name there (`pianos.name`, "Steven Jin's Piano · Fessenden School"; Brooks keeps
+"Brooks Arts Center Piano") comes to the tablet in the relay's hello, and a rename in the console reaches a connected
+tablet at once; the tablet keeps it with its enrolment and Forget this cloud clears it. **The panel** shows it as the
+page's title, the rail's name and the eyebrow of the PIN and offline cards; before the state arrives, and with no name
+(a tablet not enrolled, or a piano still "New piano" in the console), it says "Steven Piano", so a PIN page learns the
+name only once signed in. The relay's own offline page carries the name too when its room knows it. On the tablet,
+Piano › Web panel › OVER THE INTERNET says it in one quiet line, "The panel shows this piano as …, its name in the
+console". The app is still Steven Piano everywhere else. **A school's short address**: a tiny Worker,
+`playerpiano-stevenjin.sjengineering.workers.dev`, sends every request on to that piano's panel on the relay (`/` the
+panel, `/request` the guest page), and answers "This piano isn't set up yet." until its piano's id is set, once
+Fessenden's tablet is enrolled.
+

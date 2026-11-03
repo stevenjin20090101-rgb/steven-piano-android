@@ -10458,3 +10458,40 @@ exactly the 1,726 of the classical files, none changed since August, so version 
 pieces, the modern songs among them). Nothing uploaded: `releases/library.json` stays version 1, and a version 2 now
 would bring no new piece. Tools and docs only, no new version. `./gradlew test` (its unit tests run again, `--rerun`,
 not from the cache): 1,883 unit tests (12 skipped, the corpus's 7 among them), none failing.
+
+# M79: each school's name
+
+From `7229090` (main: 1.40 and the unpublished 1.41), in the worktree `android-wt-m79`, branch `m79-school-name`; no
+firmware change, no schema change (Room v7, D1's `0001_init.sql` stay). **The relay** (`cloud/`): `Hello.name`
+(`shared/protocol.ts`; `NameMessage {t:'name', name}`, `MAX_PIANO_NAME` 60) from `db.ts › panelName` (`text(…, 60)`,
+null for `DEFAULT_NAME` "New piano"); `PianoRoom.connectTablet` reads `name` with the secret (`SELECT secret_hash,
+pending_secret_hash, pending_until, name`: the revoke test's hook keys on the prefix) and says it in the hello; the new
+RPC `PianoRoom.renamed(pianoId, name)` sends `{t:'name'}` to a connected tablet, and the console's `PATCH
+/api/pianos/<id>` calls it after D1's write, best effort (a relay that doesn't answer leaves the rename standing; the
+next hello carries it). The room keeps the name (`keepName`: memory and storage `name`, written only on a change;
+`forget` clears it) for `offline(api, method, name)`: `offlinePage(name)`, HTML-escaped, in the `<title>` ("… ·
+offline") and the eyebrow; the style and its hash are unchanged, and `OFFLINE_PAGE` is the page without a name. Older
+tablets ignore `hello.name` and drop `name` (an unknown `t`, one log line). **The short address**:
+`cloud/src/short/index.ts` (only a default export) and `cloud/wrangler.short.jsonc` (`playerpiano-stevenjin`,
+`workers_dev`, no bindings, vars `RELAY_URL` and `PIANO_ID` "", `ShortEnv`): every method and path → `302`
+`${RELAY_URL origin}/p/${PIANO_ID}${pathname}${search}`, `Cache-Control: no-store`, `withSecurity` (HSTS, nosniff,
+DENY, no-referrer, CORP); a `PIANO_ID` that isn't 12 base32 letters, or a `RELAY_URL` not https (http only for localhost): `503`
+`text/plain` "This piano isn't set up yet." with `API_CSP`. `npm run deploy:short`; not deployed. **The app**:
+`RelayProtocol.pianoName` (a string, trimmed, 1–60, no control characters; anything else null, leniently),
+`RelayMessage.Hello.name` (default null; encoded only when set) and `RelayMessage.Name`; `RelayClient(named)` hands the
+name from every hello and every `name` after the hello to one keeper per connection (a conflated channel, in order);
+`WebService` keeps it with `SettingsRepository.setCloudPianoName(pianoId, name)`, written only while that id is the
+enrolment; `setCloudEnrolment` and `forgetCloud` remove it; `PianoSettings.cloudPianoName` reads it only with a piano
+id. `WebAddresses.name` (from `WebPanel`) is the state's `web.name` (null without). `CloudSection`: a `NoteLine`
+(`CloudCopy.named`) under the link while enrolled with a name. **The panel**: `[data-piano-name]` on the rail's
+`.piano-name` and the gate's and offline card's eyebrows; `app.js › applyName(state.web.name)` in `onState` sets them and
+`document.title`, "Steven Piano" without one; `.piano-name` wraps (`overflow-wrap: anywhere`). `request.html` and the
+poster are unchanged. **Tests:** cloud `name.test.ts` (new: the hello's name, null for New piano; a console rename
+reaches the tablet at once, then the offline page's escaped title and eyebrow), `short.test.ts` (new: `/` and
+`/request?x=1`, the headers; 503 for an empty, missing or malformed id and a bad relay; the config),
+`forward.test.ts` (the hello's `name`), `entrypoints.test.ts` (the short Worker exports only its handler):
+`npm test` 90 tests in 21 files (85 before), `npm run typecheck` clean; the app's `RelayProtocolTest` (+1, and the
+round trip), `RelayClientTest` (+1: the hello's name, a rename, none, a name before the hello dropped), `SettingsRepositoryTest` (kept for its enrolment only, cleared by a new
+enrolment and by Forget, a late hello after Forget keeps nothing), `WebApiTest` (`web.name`, null or the name):
+`./gradlew testDebugUnitTest lintDebug assembleDebug`: 1,885 unit tests (12 skipped), none failing; lint's two
+warnings are main's (a newer AGP and sqlite-jdbc).

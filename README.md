@@ -1002,6 +1002,14 @@ off and deletes the tablet's key; remove its row in the console too.
 the request page (the Wi-Fi poster still prints the tablet's own address). While it is off, the relay's
 request page doesn't exist.
 
+**Each school's name** (M79): the piano's name in the console, such as "Steven Jin's Piano · Fessenden
+School", is its panel's title once signed in (and the relay's offline page's); a rename reaches a connected
+tablet at once, and the tablet's OVER THE INTERNET section shows it in one line. A piano with no name of its
+own ("New piano"), or a tablet not enrolled, says "Steven Piano". **A school's short address**, such as
+`https://playerpiano-stevenjin.<you>.workers.dev`, opens its piano's panel (and `/request` its guest page):
+enrol the school's tablet, put its piano's id in `cloud/wrangler.short.jsonc` (a copy with its own `name` for
+another school) and run `npm run deploy:short` (see [`cloud/README.md`](cloud/README.md)).
+
 **What the relay sees:** it is your own Cloudflare Worker, and it carries what the panel shows and is sent,
 as any HTTPS site's server does: pages, lists, the piece playing, requests. The tablet reports every
 30 seconds: the app's and the piano's versions, whether the piano is connected, what plays, whether guests
