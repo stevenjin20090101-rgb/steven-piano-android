@@ -335,6 +335,16 @@ class ArtworkRepository(
     suspend fun setPieceCover(pieceId: Long, image: ByteArray): Boolean = keepCover(pieceId, image, record = null) == true
 
     /**
+     * [image], the cover a song zip's INDEX.csv names for piece [pieceId] (v1.43, [Importer]), becomes its own cover as an
+     * album cover the lookup found does ([CoverStore.keep]): never over a cover the piece has (drawn, found, chosen) nor
+     * one chosen or taken away by hand, and recorded as found, credited to [album] ("album · artist"; else
+     * [ArtworkEntity.FROM_SONG_ZIP]). So Apple is never asked for that piece's cover, and the covers' rule treats it as a
+     * found one ([CoverRule]: a K-pop piece keeps its plain cover). True when kept.
+     */
+    suspend fun keepZipCover(pieceId: Long, image: ByteArray, album: String): Boolean =
+        coverStore.keep(pieceId, image, sourceUrl = null, sourceTitle = album.ifBlank { ArtworkEntity.FROM_SONG_ZIP }) == Fetched.Saved
+
+    /**
      * The photo at [uri] (the photo picker's, whose grant does not last) becomes piece [pieceId]'s own cover ("Change
      * cover", v1.15 — M40): copied now, turned upright and re-encoded as a JPEG at most 1024 px on its longer side, as a
      * playlist's photo is; its lookup recorded as found and chosen here ([ArtworkEntity.CHOSEN_HERE]), so no lookup ever

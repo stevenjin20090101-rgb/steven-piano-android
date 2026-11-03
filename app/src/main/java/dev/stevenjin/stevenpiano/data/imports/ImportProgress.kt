@@ -16,7 +16,8 @@ package dev.stevenjin.stevenpiano.data.imports
  * whose blank composer this import filled in. [playlist]: once it has finished, the playlist a zip's,
  * a folder's or a loose upload's pieces were put in (DESIGN.md › v1.10.1, D2 and D7), else null.
  * [replaced] (v1.41): pieces already there that took a new version's file in place (an INDEX.csv row's `replaces`);
- * they are neither [imported] nor [duplicates].
+ * they are neither [imported] nor [duplicates]. [covers] (v1.43): album covers the zip's INDEX.csv named that pieces
+ * took as their own.
  */
 data class ImportProgress(
     val done: Int = 0,
@@ -30,6 +31,7 @@ data class ImportProgress(
     val filled: Int = 0,
     val playlist: ImportedPlaylist? = null,
     val replaced: Int = 0,
+    val covers: Int = 0,
 ) {
     /** Pieces arrived, were named or took new files: the built-in playlists and the composers' artwork have something new to look at. */
     val piecesChanged: Boolean get() = imported > 0 || filled > 0 || replaced > 0

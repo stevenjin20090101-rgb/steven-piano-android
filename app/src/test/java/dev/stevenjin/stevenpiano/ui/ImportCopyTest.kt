@@ -40,6 +40,9 @@ class ImportCopyTest {
         assertEquals("2 files couldn't be read.", ImportCopy.summary(ImportProgress(done = 2, total = 2, failed = 2)))
         assertEquals("That piece is already in the library.", ImportCopy.summary(ImportProgress(done = 1, total = 1, duplicates = 1)))
         assertEquals("Those pieces are already in the library.", ImportCopy.summary(ImportProgress(done = 3, total = 3, duplicates = 3)))
+        // v1.43: album covers a zip's INDEX.csv brought follow what came in.
+        assertEquals("Those pieces are already in the library. 1,966 covers added.", ImportCopy.summary(ImportProgress(done = 1966, total = 1966, duplicates = 1966, covers = 1966)))
+        assertEquals("Imported 3 pieces. 1 cover added. 1 file couldn't be read.", ImportCopy.summary(ImportProgress(done = 4, total = 4, imported = 3, failed = 1, covers = 1)))
     }
 
     @Test

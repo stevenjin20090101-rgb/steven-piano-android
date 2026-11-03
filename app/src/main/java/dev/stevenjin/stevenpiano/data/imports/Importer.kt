@@ -83,7 +83,8 @@ interface ImportStore {
  * [progress] follows it, and always finishes, a cancelled import's too (v1.25 — M58: Android's time
  * for data sync ran out, and what was saved stays); a quiet one ([importOpened]) keeps a progress of its own.
  * [replaced] hears of each piece that took a new file (v1.41), so what was drawn from its old one (its roll card) is
- * drawn again.
+ * drawn again. [covers] (v1.43) is offered each cover a zip's INDEX.csv names, once the pieces are saved
+ * ([keepCovers]): true when it kept it.
  */
 class Importer(
     private val store: ImportStore,
@@ -93,6 +94,7 @@ class Importer(
     private val clock: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = { Log.w(TAG, it) },
     private val replaced: suspend (pieceId: Long) -> Unit = {},
+    private val covers: suspend (pieceId: Long, image: ByteArray, album: String) -> Boolean = { _, _, _ -> false },
 ) {
     private val running = Mutex()
 
@@ -158,6 +160,7 @@ class Importer(
         // unless an INDEX.csv row of the batch places it (in its own collection, as before).
         val found = ArrayList<Pair<String, String>>()   // (path, SHA-256)
         val placed = HashSet<String>()
+        val covered = LinkedHashMap<String, IndexCsv.Row>()   // v1.43: SHA-256 -> the row whose cover it is offered
 
         suspend fun flush() {
             if (batch.isEmpty()) return
@@ -195,7 +198,9 @@ class Importer(
                 Outcome.Failed -> state = state.copy(failed = state.failed + 1)
             }
             outcome.sha?.let { sha ->
-                if (source.rowFor(item)?.collection.isNullOrBlank()) found += item.relativePath to sha else placed += sha
+                val row = source.rowFor(item)
+                if (row?.collection.isNullOrBlank()) found += item.relativePath to sha else placed += sha
+                if (row?.cover != null) covered.putIfAbsent(sha, row)
             }
             state = state.copy(done = state.done + 1)
             if (batch.size == BATCH_SIZE) flush()
@@ -203,13 +208,45 @@ class Importer(
         }
         flush()
         val playlist = link(source.batch, folders.root, found, placed)
-        state = state.copy(current = null, finished = true, playlist = playlist)
+        state = state.copy(current = null, finished = true, playlist = playlist, covers = keepCovers(source, covered))
         sink.value = state
         log(
             "Import: ${state.imported} new" + (if (state.replaced > 0) ", ${state.replaced} replaced" else "") +
-                ", ${state.duplicates} already there, ${state.failed} failed" + (playlist?.let { ", in a playlist" + named(it.name) } ?: ""),
+                ", ${state.duplicates} already there, ${state.failed} failed" + (playlist?.let { ", in a playlist" + named(it.name) } ?: "") +
+                (if (state.covers > 0) ", ${state.covers} covers" else ""),
         )
         return state
+    }
+
+    /**
+     * v1.43: each piece whose INDEX.csv row names a cover ([IndexCsv.Row.cover]), new, replaced or already there, is
+     * offered it once the pieces are saved: read from beside the index ([OpenedSource.openCover]), at most
+     * [MAX_COVER_BYTES], and handed to [covers] with the row's credit, once a piece. The artwork store keeps it as an
+     * album cover the lookup found, never over a cover the piece has nor one chosen by hand. A cover the source doesn't
+     * hold, a larger one, or one that can't be read or kept is skipped and logged; it never fails the import. Returns how
+     * many were kept.
+     */
+    private suspend fun keepCovers(source: OpenedSource, covered: Map<String, IndexCsv.Row>): Int {
+        var kept = 0
+        for ((sha, row) in covered) {
+            currentCoroutineContext().ensureActive()
+            try {
+                val piece = store.findBySha(sha) ?: continue
+                val image = source.openCover(row)?.use { ImportLimits.readCapped(it, MAX_COVER_BYTES) }
+                if (image == null) {
+                    log((if (BuildConfig.DEBUG) "${row.cover}" else "A cover") + ": missing, or larger than 1 MB")
+                    continue
+                }
+                if (covers(piece.id, image, row.coverAlbum)) kept++
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                log("A cover couldn't be read" + detail(e))
+            } catch (e: RuntimeException) {   // the library or the artwork store threw: the pieces stay, this cover is left
+                log("A cover couldn't be kept" + detail(e))
+            }
+        }
+        return kept
     }
 
     /**
@@ -404,6 +441,7 @@ class Importer(
         const val TAG = "Importer"
         const val BATCH_SIZE = 25
         const val MAX_BYTES = 8 * 1024 * 1024
+        const val MAX_COVER_BYTES = 1024 * 1024
         const val TOO_LARGE = "File too large to read"
 
         fun sha256(bytes: ByteArray): String =

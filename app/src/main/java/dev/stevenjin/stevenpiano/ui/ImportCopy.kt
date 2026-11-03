@@ -24,6 +24,7 @@ object ImportCopy {
      * adding the same files again finishes it, the pieces already in passing without comment: "Android stopped the import
      * at 1,204 of 1,727 files. Imported 1,180 pieces. Adding the same files again finishes it." Pieces that took a new
      * version's file (v1.41) are counted after those that came in: "Imported 12 pieces, replaced 360.", "Replaced 360 pieces."
+     * Album covers the zip brought (v1.43) follow: "Those pieces are already in the library. 1,966 covers added."
      */
     fun summary(progress: ImportProgress): String {
         if (progress.unreadable) {
@@ -42,8 +43,9 @@ object ImportCopy {
             progress.duplicates == 1 -> "That piece is already in the library$where."
             else -> "Those pieces are already in the library$where."
         }
+        val covers = if (progress.covers > 0) "${Format.count(progress.covers, "cover", "covers")} added." else null
         val failed = if (progress.failed > 0) "${Format.count(progress.failed, "file", "files")} couldn't be read." else null
-        return listOfNotNull(imported, failed).joinToString(" ")
+        return listOfNotNull(imported, covers, failed).joinToString(" ")
     }
 
     /** "Imported 12 pieces", "Imported 12 pieces, replaced 360" or "Replaced 360 pieces" (v1.41); null when neither came. */

@@ -72,7 +72,9 @@ sealed interface ImportBatch {
  * A source opened for reading: its MIDI files, and its INDEX.csv when it has one. [indexBase]
  * is the folder the index sits in; the index lists paths relative to it. [limited] says what cut
  * a folder's listing short, when a cap did (see [TreeWalk]). [batch] says which playlist the pieces
- * go to (v1.10.1). Close when done.
+ * go to (v1.10.1). [openFile] (v1.43) opens another of its files by its path, null when there is
+ * none: a zip's ([ZipSource.open]), for its INDEX.csv's covers; a folder's or picked files' are not
+ * read. Close when done.
  */
 class OpenedSource(
     val items: List<ImportItem>,
@@ -81,12 +83,16 @@ class OpenedSource(
     private val release: () -> Unit = {},
     val limited: String? = null,
     val batch: ImportBatch = ImportBatch.None,
+    private val openFile: (String) -> InputStream? = { null },
 ) : Closeable {
     fun rowFor(item: ImportItem): IndexCsv.Row? {
         val csv = index ?: return null
         if (!item.relativePath.startsWith(indexBase, ignoreCase = true)) return null
         return csv.lookup(item.relativePath.substring(indexBase.length))
     }
+
+    /** [row]'s cover (v1.43, [IndexCsv.Row.cover]) opened from beside the index, or null when the source has none there. */
+    fun openCover(row: IndexCsv.Row): InputStream? = row.cover?.let { openFile(indexBase + it) }
 
     override fun close() = release()
 }
@@ -144,7 +150,7 @@ fun openSource(context: Context, source: ImportSource, cancelled: () -> Boolean 
             val name = displayName(resolver, source.uri)
             val zip = ZipSource(ZipSource.copyToCache(resolver, source.uri, context.cacheDir), deleteWhenClosed = true)
             try {
-                OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close, batch = ImportBatch.zip(name))
+                OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close, batch = ImportBatch.zip(name), openFile = zip::open)
             } catch (e: Exception) {
                 zip.close()
                 throw e
@@ -170,7 +176,7 @@ fun openLocalZip(source: ImportSource.LocalZip): OpenedSource {
             source.skipShas.isEmpty() || index == null || !item.relativePath.startsWith(base, ignoreCase = true) ||
                 index.lookup(item.relativePath.substring(base.length))?.sha256 !in source.skipShas
         }
-        return OpenedSource(items, index, base, zip::close)
+        return OpenedSource(items, index, base, zip::close, openFile = zip::open)
     } catch (e: Exception) {
         zip.close()
         throw e

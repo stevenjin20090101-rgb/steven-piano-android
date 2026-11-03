@@ -522,7 +522,7 @@ class AppWebBackend(
         }
         // The zip's pieces go into its own playlist, named after its root folder or the zip (v1.10.1, D2).
         val source = try {
-            OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close, batch = ImportBatch.zip(name))
+            OpenedSource(zip.items(), zip.readIndex(), zip.indexBase, zip::close, batch = ImportBatch.zip(name), openFile = zip::open)
         } catch (e: CancellationException) {
             zip.close()
             throw e

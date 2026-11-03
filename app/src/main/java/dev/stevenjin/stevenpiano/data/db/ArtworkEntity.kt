@@ -73,5 +73,11 @@ data class ArtworkEntity(
          * reads as a found cover's; no lookup ever looks for that piece's cover again (`ArtworkPolicy.recordOf`).
          */
         const val CHOSEN_IN_PANEL = "Chosen in the web panel"
+
+        /**
+         * A cover row's [sourceTitle] for a cover a song zip brought (v1.43, INDEX.csv's `cover`) without a credit: the
+         * piece sheet reads "Cover: from the song zip". Found, not chosen: a lookup's rules apply to it.
+         */
+        const val FROM_SONG_ZIP = "from the song zip"
     }
 }

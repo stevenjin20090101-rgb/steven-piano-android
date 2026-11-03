@@ -4037,3 +4037,20 @@ console". The app is still Steven Piano everywhere else. **A school's short addr
 panel, `/request` the guest page), and answers "This piano isn't set up yet." until its piano's id is set, once
 Fessenden's tablet is enrolled.
 
+
+# v1.43 — album covers from the song zip
+
+Steven, 2026-11-02: the song search on the Mac looks up each modern song's album art (Apple's catalogue, as the
+tablet's own lookup does), and he wants it on the tablet too, without the tablet asking Apple again for two thousand
+songs one search every 3.5 s. **INDEX.csv's `cover` and `cover_album`** (optional, found by their header names): a
+JPEG or PNG beside the music, its path relative to the index as `path` is, and its credit, "album · artist" as a found
+cover's; a cover that is not .jpg, .jpeg or .png, or whose path climbs out with "..", is ignored, and an index without
+them reads as before. **On import** of a zip (Add zip, the web panel's upload, Steven's library), once the pieces are
+saved, each piece whose row names a cover, new, replaced or already there, is offered it, once: the cover becomes the
+piece's own as an album cover the lookup found does. It never goes over a cover the piece has (drawn by Studio or a
+recording, found by the lookup, chosen by hand), nor where one was taken away in the panel; it is recorded as found,
+so Apple is never asked for that piece's cover, and the covers' rule treats it as a found one: a K-pop piece keeps its
+plain cover (M73), a House & Dance piece shows it. A cover over 1 MB, missing from the zip or unreadable is skipped;
+it never fails the import. A folder's or files picked one by one bring no covers. The piece sheet's credit reads
+"Cover: 25 · Adele" (or "Cover: from the song zip" with none). **The words**: the import bar adds "1,966 covers
+added."; the web panel's tally "1,966 covers added".

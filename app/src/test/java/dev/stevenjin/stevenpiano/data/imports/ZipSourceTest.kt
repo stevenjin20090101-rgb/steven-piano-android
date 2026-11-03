@@ -65,6 +65,18 @@ class ZipSourceTest {
     }
 
     @Test
+    fun `open finds a file by its INDEX path, either slash and any case, and gives null when the zip has none (v1_43)`() {
+        val file = zip("ALL/covers/Adele/Hello.jpg" to byteArrayOf(1, 2), "ALL/INDEX.csv" to "path,cover\nHello.mid,covers/Adele/Hello.jpg\n".toByteArray())
+        ZipSource(file).use { zip ->
+            assertArrayEquals(byteArrayOf(1, 2), zip.open("all\\COVERS/Adele/hello.JPG")?.use { it.readBytes() })
+            assertNull(zip.open("ALL/covers/Adele/Skyfall.jpg"))
+            val source = OpenedSource(emptyList(), zip.readIndex(), zip.indexBase, openFile = zip::open)
+            val row = zip.readIndex()!!.lookup("Hello.mid")!!
+            assertArrayEquals("a row's cover, from beside the index", byteArrayOf(1, 2), source.openCover(row)?.use { it.readBytes() })
+        }
+    }
+
+    @Test
     fun `names that are not UTF-8 are read as Latin-1`() {
         val file = zip("Satie - Gymnopédie.mid" to midi, charset = Charsets.ISO_8859_1)
         ZipSource(file).use { zip ->

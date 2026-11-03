@@ -284,11 +284,12 @@ class WebApiTest {
         assertEquals("http://100.101.2.3:8737", json.getJSONObject("web").getString("address"))
         assertTrue(json.getJSONObject("import").getBoolean("running"))
         // v1.10.1 — M28 (D7): the playlist the last finished import filled, null while one runs or when it filled none.
-        // v1.41: the pieces that took a new version's file in place, `replaced`.
-        assertEquals(setOf("running", "done", "total", "imported", "replaced", "duplicates", "failed", "current", "playlist"), json.getJSONObject("import").keys().asSequence().toSet())
+        // v1.41: the pieces that took a new version's file in place, `replaced`. v1.43: the covers a zip brought, `covers`.
+        assertEquals(setOf("running", "done", "total", "imported", "replaced", "duplicates", "failed", "covers", "current", "playlist"), json.getJSONObject("import").keys().asSequence().toSet())
         assertTrue(json.getJSONObject("import").isNull("playlist"))
-        val finished = WebApi.import(ImportProgress(done = 266, total = 266, imported = 265, duplicates = 1, playlist = ImportedPlaylist(14, "MIDI"), replaced = 40))
+        val finished = WebApi.import(ImportProgress(done = 266, total = 266, imported = 265, duplicates = 1, playlist = ImportedPlaylist(14, "MIDI"), replaced = 40, covers = 7))
         assertEquals(40, finished.getInt("replaced"))
+        assertEquals(7, finished.getInt("covers"))
         assertEquals(14, finished.getJSONObject("playlist").getLong("id"))
         assertEquals("MIDI", finished.getJSONObject("playlist").getString("name"))
         assertTrue("a run under way shows none yet", WebApi.import(ImportProgress(done = 3, total = 9, finished = false, playlist = ImportedPlaylist(14, "MIDI"))).isNull("playlist"))

@@ -28,7 +28,7 @@ keeps silent at the hours you set (see *Quiet times*), on the school tablet it c
 (see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
 piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
-on the tablet*). Made by Steven Jin. Version 1.42.
+on the tablet*). Made by Steven Jin. Version 1.43.
 
 ## What it does
 
@@ -492,7 +492,7 @@ One-time setup, with a computer and a USB cable:
    the device. Accounts can be added afterwards. A tablet already in use needs no reset:
    removing every account is enough (see *Kiosk*).
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.42.apk`.
+   `adb install ../apk/steven-piano-1.43.apk`.
 3. Make the app the device owner:
 
    ```bash
@@ -670,6 +670,18 @@ of them, the one added first is replaced and the others stay. A file the library
 has is skipped as before, and a row naming none the library holds brings a new piece.
 The import says "Imported 1,204 pieces, replaced 360" (the web panel: "360 replaced").
 Every import does this: Add zip, Add folder, the web panel and Steven's library.
+
+### Importing: album covers from a zip
+
+From 1.43 a zip's `INDEX.csv` may have a `cover` column: the path of a JPEG or PNG in the
+zip (relative to the index, as `path` is) to be that piece's album cover, and a
+`cover_album` column with its credit ("25 · Adele"). Once the pieces are in, each one whose
+row names a cover takes it, pieces already in the library too, unless it has a cover of
+its own: one the album-cover lookup found, one you chose, or one Studio or a recording
+drew. A cover you took away in the web panel stays away. The tablet then never looks that
+piece's cover up itself, and a K-pop piece keeps its plain cover. A cover over 1 MB or
+missing from the zip is skipped. The import says "1,966 covers added." Zips only: a
+folder or files picked one by one bring no covers.
 
 ## Steven's library
 

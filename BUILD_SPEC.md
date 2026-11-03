@@ -10501,3 +10501,39 @@ warnings are main's (a newer AGP and sqlite-jdbc).
 M79 (each school's name on its panel, and a school's short address) on top of 1.41 (versionCode 52, a new version in
 place), which was committed but never published, so 1.42 carries both. The cloud's relay and console need deploying
 with it for the name to reach the tablets; the short Worker `playerpiano-stevenjin` once Fessenden's tablet is enrolled.
+
+# v1.43 — album covers from the song zip: INDEX.csv's `cover`
+
+From `67c5f77` (1.42), in the main checkout; the library side (the covers and the columns in the song zips) is the song
+search's, `midi-work/scripts/covers.py` and `build_all_zip.py`. No schema change (Room v7 stays). **`IndexCsv.Row.cover:
+String?`, `coverAlbum: String`**: the columns found by their header names `cover` and `cover_album` only (none without a
+header); a cover is kept when it ends in .jpg, .jpeg or .png (any case), backslashes made slashes, and no segment is
+"..", else null; the credit trimmed. **`OpenedSource.openFile`** (a parameter, `{ null }` by default) and
+**`openCover(row)`**: `indexBase + row.cover` opened through it; `ZipSource.open(path)` finds an entry by
+`IndexCsv.normalizePath` (either slash, any case; hidden entries are not listed), null when none; the three zip sources
+pass it (`openSource`'s Zip, `openLocalZip`, `AppWebBackend`'s upload); a tree's and picked files' don't. **`Importer`**:
+`run` keeps, by SHA-256, the first row naming a cover of each outcome with a SHA-256 (ready, duplicate, replaced); after
+`flush()` and `link()`, `keepCovers`: per SHA-256, `findBySha` (none: skipped), `openCover` read through
+`ImportLimits.readCapped(MAX_COVER_BYTES = 1 MB)` (null: logged "…: missing, or larger than 1 MB", the cover named in
+debug builds only), then `covers(pieceId, image, coverAlbum)`, a new constructor hook (`{ false }` by default),
+counted when true; an `IOException` or a `RuntimeException` is logged and the next goes on, cancellation is checked
+between covers. `ImportProgress.covers` (not in `piecesChanged`: the covers come through the artwork rows); the log's
+", N covers" only when some were; `WebApi.import`'s `covers` and the panel's "N covers added" (`library.js`);
+`ImportCopy.summary`'s "N covers added." after what came in. **`AppGraph`** passes `covers = { id, image, album ->
+artwork.keepZipCover(id, image, album) }`; **`ArtworkRepository.keepZipCover`** is `coverStore.keep(pieceId, image,
+sourceUrl = null, sourceTitle = album.ifBlank { ArtworkEntity.FROM_SONG_ZIP })` == `Fetched.Saved`, the album-cover
+lookup's own path: `BitmapCache.isImage`, then `keepCover(…, unlessCovered = true)` (nothing over a piece's
+`imagePath`, nor where `ArtworkPolicy.chosenByHand`), the `cover:<id>` row written OK with that credit, so
+`ArtworkPolicy` never looks the piece up again and `CoverRule` treats it as found (`coversChosenByHand` doesn't list it).
+**Tests:** `ImporterTest` (+6: a new piece's cover with its credit and the log; a piece already there offered its cover
+once whatever copies the zip holds, a refused one not counted; a replaced piece under its own id; a missing, a 1 MB + 1
+and a .gif cover skipped with the pieces as before; no columns or no `openFile`, none offered; the column's parsing:
+.jpg/.jpeg/.png only, no "..", the credit trimmed, none without a header), `ZipSourceTest` (+1: `open` by path in
+either slash and any case, null when missing, and `openCover` from beside the index), `ImportCopyTest` (+2),
+`WebApiTest` (the `covers` key).
+
+`./gradlew test`: 1,892 unit tests (12 skipped), none failing; `assembleRelease` passes and the provenance verifies.
+
+## The release: 1.43 (versionCode 54)
+
+Album covers from the song zip (INDEX.csv's `cover`).

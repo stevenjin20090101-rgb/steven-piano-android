@@ -17,8 +17,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -36,7 +38,16 @@ class ImporterTest {
     private val progress = MutableStateFlow(ImportProgress.Idle)
     private val logs = mutableListOf<String>()
     private val redrawn = mutableListOf<Long>()
-    private val importer by lazy { Importer(store, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it }, replaced = { redrawn += it }) }
+
+    /** v1.43: the covers offered to the artwork store (piece id, picture, credit); [keepCovers] false as when a piece has its own. */
+    private val offered = mutableListOf<Triple<Long, ByteArray, String>>()
+    private var keepCovers = true
+    private val importer by lazy {
+        Importer(
+            store, PieceFiles(tmp.root), progress, clock = { 1_000L }, log = { logs += it }, replaced = { redrawn += it },
+            covers = { id, image, album -> offered += Triple(id, image, album); keepCovers },
+        )
+    }
 
     private fun midi(key: Int, trackName: String? = null) = SmfBuilder(format = 0).track {
         trackName?.let { name(0, it) }
@@ -552,6 +563,99 @@ class ImporterTest {
         assertEquals(ImportProgress(done = 2, total = 2, imported = 1, replaced = 1, finished = true, playlist = ImportedPlaylist(1, "MIDI")), result)
         assertEquals(listOf("Hello", "Skyfall"), titles("MIDI"))
         assertTrue("a row without a collection names no playlist of its own", store.collectionLinks.isEmpty())
+    }
+
+    // v1.43: an INDEX csv row's `cover` names its piece's album cover, a picture beside the music; `cover_album` its credit.
+
+    private val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 1, 2, 3)
+
+    private fun covered(vararg rows: String) =
+        IndexCsv.parse("collection,composer,title,size_kb,path,replaces,cover,cover_album\n" + rows.joinToString("\n") + "\n")
+
+    /** A source's other files, by path in any case, as a zip's are ([ZipSource.open]). */
+    private fun files(vararg entries: Pair<String, ByteArray>): (String) -> InputStream? =
+        { path -> entries.firstOrNull { it.first.equals(path, ignoreCase = true) }?.second?.let(::ByteArrayInputStream) }
+
+    @Test
+    fun `a row's cover goes to its new piece once the pieces are saved, with the row's credit`() = runTest {
+        val source = OpenedSource(
+            listOf(item("ALL/modern/Adele/Hello.mid", midi(61)), item("ALL/modern/Adele/Skyfall.mid", midi(62))),
+            covered("Pop,Adele,Hello,1,modern/Adele/Hello.mid,,covers/Adele/Hello.jpg,25 · Adele", "Pop,Adele,Skyfall,1,modern/Adele/Skyfall.mid,,,"),
+            indexBase = "ALL/",
+            openFile = files("ALL/covers/Adele/Hello.jpg" to jpeg),
+        )
+        val result = importer.run(source)
+        assertEquals(ImportProgress(done = 2, total = 2, imported = 2, finished = true, covers = 1), result)
+        val (id, image, album) = offered.single()
+        assertEquals(store.pieces.single { it.title == "Hello" }.id, id)
+        assertArrayEquals(jpeg, image)
+        assertEquals("25 · Adele", album)
+        assertEquals("Import: 2 new, 0 already there, 0 failed, 1 covers", logs.last())
+    }
+
+    @Test
+    fun `a piece already there is offered its row's cover too, and a cover the store doesn't keep isn't counted`() = runTest {
+        val hello = midi(61)
+        importer.run(OpenedSource(listOf(item("modern/Adele/Hello.mid", hello))))
+        val zip = OpenedSource(
+            listOf(item("modern/Adele/Hello.mid", hello), item("copy/Hello.mid", hello)),
+            covered("Pop,Adele,Hello,1,modern/Adele/Hello.mid,,covers/Hello.png,"),
+            openFile = files("covers/Hello.png" to jpeg),
+        )
+        assertEquals(ImportProgress(done = 2, total = 2, duplicates = 2, finished = true, covers = 1), importer.run(zip))
+        assertEquals("once a piece, whatever copies the zip holds", listOf(store.pieces.single().id to ""), offered.map { it.first to it.third })
+        keepCovers = false   // the piece has a cover of its own now, or one chosen by hand
+        assertEquals(0, importer.run(zip).covers)
+        assertEquals(2, offered.size)
+    }
+
+    @Test
+    fun `a replaced piece is offered its row's cover under its own id`() = runTest {
+        val band = midi(60)
+        val path = "modern/Coldplay/Yellow.mid"
+        importer.run(OpenedSource(listOf(item(path, band))))
+        val before = store.pieces.single()
+        val result = importer.run(
+            OpenedSource(listOf(item(path, piano)), covered("Pop,Coldplay,Yellow,1,$path,${sha(band)},covers/Yellow.jpg,Parachutes · Coldplay"), openFile = files("covers/Yellow.jpg" to jpeg)),
+        )
+        assertEquals(1, result.replaced)
+        assertEquals(1, result.covers)
+        assertEquals(before.id to "Parachutes · Coldplay", offered.single().let { it.first to it.third })
+    }
+
+    @Test
+    fun `a cover the source lacks, one over 1 MB or one that is no picture is skipped, and the pieces come in as before`() = runTest {
+        val source = OpenedSource(
+            listOf(item("a/One.mid", midi(60)), item("a/Two.mid", midi(61)), item("a/Three.mid", midi(62))),
+            covered("Pop,X,One,1,a/One.mid,,covers/missing.jpg,", "Pop,X,Two,1,a/Two.mid,,covers/big.jpg,", "Pop,X,Three,1,a/Three.mid,,covers/three.gif,"),
+            openFile = files("covers/big.jpg" to ByteArray(1024 * 1024 + 1), "covers/three.gif" to jpeg),
+        )
+        assertEquals(ImportProgress(done = 3, total = 3, imported = 3, finished = true), importer.run(source))
+        assertTrue(offered.isEmpty())
+        assertEquals("debug builds name the cover, release builds don't", 2, logs.count { it.endsWith(": missing, or larger than 1 MB") })
+    }
+
+    @Test
+    fun `an index without the cover columns, or a source that can't open its files, offers no covers`() = runTest {
+        importer.run(OpenedSource(listOf(item("a/One.mid", midi(60))), index("Pop,X,One,1,a/One.mid,")))
+        importer.run(OpenedSource(listOf(item("b/Two.mid", midi(61))), covered("Pop,X,Two,1,b/Two.mid,,covers/two.jpg,")))   // a folder's import
+        assertTrue(offered.isEmpty())
+        assertEquals(2, store.pieces.size)
+    }
+
+    @Test
+    fun `an INDEX csv's cover is a jpg, jpeg or png inside its folder, its credit trimmed`() {
+        val csv = covered(
+            "Pop,A,One,1,a/One.mid,,covers\\One.JPG,  Album · A  ",
+            "Pop,A,Two,1,a/Two.mid,,../outside.jpg,",
+            "Pop,A,Three,1,a/Three.mid,,covers/three.webp,",
+            "Pop,A,Four,1,a/Four.mid,,covers/four.jpeg,",
+        )
+        assertEquals("covers/One.JPG" to "Album · A", csv.lookup("a/One.mid")!!.let { it.cover to it.coverAlbum })
+        assertNull(csv.lookup("a/Two.mid")!!.cover)
+        assertNull(csv.lookup("a/Three.mid")!!.cover)
+        assertEquals("covers/four.jpeg", csv.lookup("a/Four.mid")!!.cover)
+        assertNull("without a header no column is a cover", IndexCsv.parse("Pop,A,Five,1,a/Five.mid,,covers/five.jpg\n").lookup("a/Five.mid")!!.cover)
     }
 
     private class FakeStore : ImportStore {

@@ -26,6 +26,12 @@ import java.util.Locale
  * v1.41: an optional column `replaces`, found by its header name only: the SHA-256s of earlier versions of the
  * row's file, apart by spaces, read into [Row.replaces] (64 hex digits each, kept lower-case; anything else is left
  * out), so a new version takes its old one's place in the library ([Importer]). An index without it reads as before.
+ *
+ * v1.43: optional columns `cover` and `cover_album`, found by their header names only: a JPEG or PNG beside the music
+ * (its path relative to the index, as `path` is) to be the piece's album cover, and its credit ("album · artist", as
+ * a found cover's), read into [Row.cover] and [Row.coverAlbum]. A cover that is not a .jpg, .jpeg or .png, or whose
+ * path climbs out with "..", is left out. The importer keeps it as an album cover the lookup found ([Importer]). An
+ * index without them reads as before.
  */
 class IndexCsv private constructor(private val rows: Map<String, Row>) {
     data class Row(
@@ -35,6 +41,8 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
         val path: String,
         val sha256: String? = null,
         val replaces: Set<String> = emptySet(),
+        val cover: String? = null,
+        val coverAlbum: String = "",
     )
 
     val size: Int get() = rows.size
@@ -61,6 +69,8 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
             val path = column("path", 4)
             val sha256 = column("sha256", 5)
             val replaces = if (hasHeader) header.indexOf("replaces") else -1
+            val cover = if (hasHeader) header.indexOf("cover") else -1
+            val coverAlbum = if (hasHeader) header.indexOf("cover_album") else -1
             val rows = (if (hasHeader) table.drop(1) else table).mapNotNull { cells ->
                 val filePath = cells.getOrNull(path)?.trim().orEmpty()
                 if (filePath.isEmpty()) return@mapNotNull null
@@ -71,10 +81,18 @@ class IndexCsv private constructor(private val rows: Map<String, Row>) {
                     path = filePath,
                     sha256 = cells.getOrNull(sha256)?.trim()?.takeIf { SHA256.matches(it) }?.lowercase(Locale.ROOT),
                     replaces = shas(cells.getOrNull(replaces)),
+                    cover = picture(cells.getOrNull(cover)),
+                    coverAlbum = cells.getOrNull(coverAlbum)?.trim().orEmpty(),
                 )
             }
             return IndexCsv(rows.toMap())
         }
+
+        private val PICTURE = Regex("\\.(jpe?g|png)$", RegexOption.IGNORE_CASE)
+
+        /** A `cover` field's path (v1.43): a .jpg, .jpeg or .png that stays inside the index's folder, else null. */
+        private fun picture(field: String?): String? =
+            field?.trim()?.replace('\\', '/')?.takeIf { PICTURE.containsMatchIn(it) && ".." !in it.split('/') }
 
         /** A `replaces` field's SHA-256s (v1.41), in its order; a value that is not 64 hex digits is left out. */
         private fun shas(field: String?): Set<String> =

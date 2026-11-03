@@ -61,6 +61,14 @@ class ZipSource(private val file: File, private val deleteWhenClosed: Boolean = 
         ImportItem(TextLimits.clip(entry.name.substringAfterLast('/'), TextLimits.DISPLAY_NAME), entry.name) { zip.getInputStream(entry) }
     }
 
+    private val byPath: Map<String, ZipEntry> by lazy { entries.associateBy { IndexCsv.normalizePath(it.name) } }
+
+    /**
+     * The file at [path] opened (v1.43: an INDEX.csv's cover), the path compared as the index's are
+     * ([IndexCsv.normalizePath]: either slash, any case); null when the zip holds none there.
+     */
+    fun open(path: String): InputStream? = byPath[IndexCsv.normalizePath(path)]?.let { zip.getInputStream(it) }
+
     /** The INDEX.csv, or null when there is none or it is larger than [ImportLimits.INDEX_BYTES] (then it is ignored). */
     fun readIndex(): IndexCsv? = indexEntry?.let { entry ->
         zip.getInputStream(entry).use { ImportLimits.readCapped(it, ImportLimits.INDEX_BYTES) }?.let { IndexCsv.parse(it.toString(Charsets.UTF_8)) }
