@@ -482,5 +482,16 @@
     "minSdk": 26,
     "tag": "v1.40",
     "publishedAt": "2026-11-01"
+  },
+  {
+    "versionCode": 53,
+    "versionName": "1.42",
+    "notes": "Each school's remote control shows its own name. A new version of a piece now replaces the old one.",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.42/steven-piano-1.42.apk",
+    "sha256": "f9eaa245e26ae8caa6c3d2ba6009059d24144670c87f4fa6a26fcbe93198f679",
+    "sizeBytes": 14527409,
+    "minSdk": 26,
+    "tag": "v1.42",
+    "publishedAt": "2026-11-03"
   }
 ]
