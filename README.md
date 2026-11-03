@@ -28,7 +28,7 @@ keeps silent at the hours you set (see *Quiet times*), on the school tablet it c
 (see *Kiosk*), **Studio**, a tab of its own, composes a piece from an idea you type, or turns a
 piano recording into a piece, on the tablet itself (see *Studio*), and the tablet can play
 the pieces itself with recordings of a real piano when the piano isn't there (see *Piano sound
-on the tablet*). Made by Steven Jin. Version 1.41.
+on the tablet*). Made by Steven Jin. Version 1.42.
 
 ## What it does
 
@@ -492,7 +492,7 @@ One-time setup, with a computer and a USB cable:
    the device. Accounts can be added afterwards. A tablet already in use needs no reset:
    removing every account is enough (see *Kiosk*).
 2. Turn on USB debugging (see *Sideload*), connect the tablet and install the release:
-   `adb install ../apk/steven-piano-1.41.apk`.
+   `adb install ../apk/steven-piano-1.42.apk`.
 3. Make the app the device owner:
 
    ```bash

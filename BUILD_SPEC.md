@@ -10495,3 +10495,9 @@ round trip), `RelayClientTest` (+1: the hello's name, a rename, none, a name bef
 enrolment and by Forget, a late hello after Forget keeps nothing), `WebApiTest` (`web.name`, null or the name):
 `./gradlew testDebugUnitTest lintDebug assembleDebug`: 1,885 unit tests (12 skipped), none failing; lint's two
 warnings are main's (a newer AGP and sqlite-jdbc).
+
+## The release: 1.42 (versionCode 53)
+
+M79 (each school's name on its panel, and a school's short address) on top of 1.41 (versionCode 52, a new version in
+place), which was committed but never published, so 1.42 carries both. The cloud's relay and console need deploying
+with it for the name to reach the tablets; the short Worker `playerpiano-stevenjin` once Fessenden's tablet is enrolled.
