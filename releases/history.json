@@ -504,5 +504,12 @@
     "minSdk": 26,
     "tag": "v1.43",
     "publishedAt": "2026-11-03"
+  },
+  {
+    "versionCode": 55,
+    "versionName": "1.44",
+    "notes": "Uses less of the shared cloud allowance, and waits properly before trying again when the cloud is down. The library's download notification no longer clashes with Studio's. Tidying inside the app, with nothing else changed for you.",
+    "tag": "v1.44",
+    "draft": true
   }
 ]

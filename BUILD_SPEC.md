@@ -224,3 +224,7 @@ Nothing a person sees changes, but for a notification that no longer clashes.
 Seen on the emulator (`steven_piano`, the fake plug): the app starts with no error from its process; a two-part send of 1,203
 songs and 997 covers through the panel; the plug paired, the piano on, a piece played from the panel; `trunk dead` gave `CHECK: 0
 of 7 boards` and `TrunkFault(answered=0, total=7, cut=true)` with the 24 V off.
+
+## The release: 1.44 (versionCode 55)
+
+Uses less of the shared cloud allowance, and waits properly before trying again when the cloud is down. The library's download notification no longer clashes with Studio's. Tidying inside the app, with nothing else changed for you.
