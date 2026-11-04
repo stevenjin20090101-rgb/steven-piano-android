@@ -14,9 +14,8 @@
 #   tools/publish-release.sh <versionName> "<notes>"
 #   tools/publish-release.sh 1.5 "Fixes for the school tablet."
 #
-# Before running it: set versionCode (one higher) and versionName in app/build.gradle.kts and
-# Provenance.text, update the docs, commit, and re-sign provenance. The tree must be clean and
-# on main. It needs ~/steven-piano-keystore.properties (the release key, never in the repo),
+# Before running it: tools/release.sh, which sets the version, runs the gate, commits and re-signs
+# provenance. The tree must be clean and on main. It needs ~/steven-piano-keystore.properties (the release key, never in the repo),
 # JDK 17, the Android SDK, and the GitHub CLI signed in (`gh auth login`).
 #
 # What it does, in order, stopping at the first problem:
@@ -30,7 +29,7 @@
 #   5. writes releases/latest.json (versionCode read from the APK itself, versionName, notes, the
 #      release asset's URL, SHA-256, size, minSdk), appends it to releases/history.json (in place
 #      of the entry drafted there with the version bump, "draft": true, if there is one), commits
-#      them ("Co-Authored-By: Claude Fable 5.1") and pushes.
+#      them (with $CO_AUTHOR) and pushes.
 # The release exists before the manifest that names it is pushed, so no phone ever reads a
 # manifest whose file is not there yet. Phones read the manifest from raw.githubusercontent.com,
 # so the repository must be public.
@@ -39,7 +38,7 @@ set -euo pipefail
 
 REPO="stevenjin20090101-rgb/steven-piano-android"
 MAX_APK_BYTES=$((50 * 1024 * 1024))
-CO_AUTHOR="Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+CO_AUTHOR="${CO_AUTHOR:-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>}"
 
 die() {
     echo "publish-release: $*" >&2

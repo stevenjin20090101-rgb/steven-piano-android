@@ -580,15 +580,17 @@ The school tablet and any piano that stays gets the release build,
 
 ## Publishing a release
 
-One command on this Mac, after the version is set and committed:
+Two commands on this Mac, from a clean `main`:
 
-1. In `app/build.gradle.kts` raise `versionCode` by one and set `versionName` (and
-   `Provenance.text`, the README and BUILD_SPEC); draft the release's entry at the end
-   of `releases/history.json` (`"draft": true`, its version and notes: a test checks
-   it); commit, then re-sign provenance
-   (`~/.platformio/penv/bin/python3 provenance/sign.py && ~/.platformio/penv/bin/python3 provenance/verify.py`)
-   and commit `provenance/`.
-2. Run:
+1. Get it ready. This sets the version everywhere it is written (`app/build.gradle.kts`, `Provenance.text`,
+   the README, BUILD_SPEC and the drafted entry in `releases/history.json`), runs the unit tests, lint and
+   the debug build, commits, re-signs provenance and commits that. Nothing leaves this Mac:
+
+   ```bash
+   tools/release.sh 1.5 "Fixes for the school tablet."
+   ```
+
+2. Publish it (`tools/release.sh` with `--publish` runs this for you):
 
    ```bash
    tools/publish-release.sh 1.5 "Fixes for the school tablet."
