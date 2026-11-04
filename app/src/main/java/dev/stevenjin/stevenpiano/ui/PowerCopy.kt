@@ -127,7 +127,6 @@ object PowerCopy {
     const val NOT_PAIRED = "Not paired"
     const val SWITCHED_OFF = "Off"
     const val RAIL_ON = "24 V on"
-    const val GUEST_ON = "24 V on for guest play"
 
     /** The hub's row: "Not paired", "Off" (the plug's switch), or where the rail stands ("24 V off", "24 V on"…). */
     fun hub(settings: PlugSettings?, phase: RailPhase): String = when {
@@ -181,7 +180,6 @@ object PowerCopy {
         "The 24 V goes off now. It stays off until the plug is paired again, or the supply moves to a wall socket."
     const val FORGET_ACTION = "Forget"
     const val WELDED = "After the 24 V was cut the plug still reads on: its relay may be stuck. Unplug the supply and check the plug."
-    const val WELDED_SHORT = "The plug's relay may be stuck on"
 
     /** The plug's switch as its adverts say (v1.36 — M72): "On", "Off", or "Not seen" for none in 10 s. */
     fun output(seen: PlugAdvert?): String = when {
@@ -222,7 +220,6 @@ object PowerCopy {
     }
 
     const val CLICKED = "The plug clicked on and off."
-    const val FIND = "Find the plug"
     const val SEARCH = "Search again"
     const val SEARCHING = "Searching…"
     const val START_OVER = "Start over"
