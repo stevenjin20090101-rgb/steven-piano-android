@@ -110,7 +110,7 @@ import java.io.IOException
  * the panel's server for relayed requests (host "relay", never listening), sharing the hub and the
  * sessions with the listeners; its PIN tries have a guard of their own, far stricter
  * ([dev.stevenjin.stevenpiano.web.WebPanel.relayGuard], audit delta 3). The client starts once the tablet is enrolled, again
- * for each new enrolment, and is nudged when a network comes and at each look; its state goes to the
+ * for each new enrolment, and is nudged when a network comes; its state goes to the
  * Remote page ([dev.stevenjin.stevenpiano.web.WebPanel.cloud]) and adds "· Cloud" to the notification
  * while connected.
  */
@@ -184,8 +184,7 @@ class WebService : Service() {
         scope.launch {
             while (isActive) {
                 delay(LOOK_AGAIN_MS)
-                networkChanged.value++
-                relay?.nudge()
+                networkChanged.value++   // not the relay (v1.44): only a real network change ends its wait, or the 5 minutes would be 30 s
                 if (wakeLock.isHeld) wakeLock.acquire(WAKE_LOCK_MS)   // still playing: renewed, so a channel's hours keep it
             }
         }

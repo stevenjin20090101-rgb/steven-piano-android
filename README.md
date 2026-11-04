@@ -1024,7 +1024,7 @@ another school) and run `npm run deploy:short` (see [`cloud/README.md`](cloud/RE
 
 **What the relay sees:** it is your own Cloudflare Worker, and it carries what the panel shows and is sent,
 as any HTTPS site's server does: pages, lists, the piece playing, requests. The tablet reports every
-30 seconds: the app's and the piano's versions, whether the piano is connected, what plays, whether guests
+5 minutes and after a change: the app's and the piano's versions, whether the piano is connected, what plays, whether guests
 may request (and wait for approval), whether the web panel is on, the library's size and the version of
 Steven's library loaded, and the channels' names. Never a device identifier (no Bluetooth address, no
 serial, no Android id) and never the tablet's address on its own networks; enrolling sends the code alone.
@@ -1873,7 +1873,7 @@ The full audit, every finding and what was done about it, is in
   GitHub hands the file over), carrying nothing but the app's User-Agent and, as with
   any connection, the device's IP address. With *Remote access over the internet* on (off
   at first; see *Cloud*), one connection more, over HTTPS to your own relay: what the panel
-  shows and is sent, and every 30 seconds the tablet's status (versions, whether the piano
+  shows and is sent, and every 5 minutes and after a change the tablet's status (versions, whether the piano
   is connected, what plays, the guests' switches, whether the web panel is on, the library's
   size and pack, the channels' names), never a device identifier or the tablet's own network
   address (*What the relay sees*). Studio's runtime (ONNX Runtime 1.28.0) sends

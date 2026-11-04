@@ -178,7 +178,7 @@ The protocol (`steven-piano-relay-1`) is in `src/shared/protocol.ts`, and the ap
 
 - The tablet connects to `wss://<relay>/tablet` with `Authorization: Bearer <piano>.<secret>`; the
   room checks the secret's SHA-256 against the database and says `hello`, with the piano's name
-  (M79). The tablet sends its `status` every 30 seconds and after a change. A rename in the console
+  (M79). The tablet sends its `status` every 5 minutes and after a change. A rename in the console
   reaches it as `name`.
 - A browser's request to `/p/<piano>/…` becomes a `req` (the prefix taken off; only `Host`,
   `Cookie`, `Origin`, `Content-Type`, `Content-Length`, `X-Steven-Piano` and `Accept` passed on, and

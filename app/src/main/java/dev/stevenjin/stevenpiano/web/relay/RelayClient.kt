@@ -167,7 +167,7 @@ class RelayClient(
         _state.value = CloudStatus.Off
     }
 
-    /** A network came back (or the web service looked again): a wait for the next try ends now, if the device is online. */
+    /** A network came back: a wait for the next try ends now, if the device is online. */
     fun nudge() {
         if (_state.value is CloudStatus.Waiting && online()) wake.trySend(Unit)
     }
@@ -583,8 +583,11 @@ class RelayClient(
         /** After 4409 (another tablet took over), a minute before trying again. */
         const val REPLACED_WAIT_MS = 60_000L
 
-        /** A status report at least this often. */
-        const val STATUS_EVERY_MS = 30_000L
+        /**
+         * A status report at least this often (v1.44: 5 minutes, was 30 s): a change goes within [STATUS_SETTLE_MS] anyway, and
+         * the free Cloudflare limits are shared. The relay's `FRESH_MS` (cloud/src/shared/db.ts) must stay well above this.
+         */
+        const val STATUS_EVERY_MS = 5 * 60_000L
 
         /** A change is reported at most this long after it. */
         const val STATUS_SETTLE_MS = 2_000L

@@ -76,10 +76,11 @@ export interface PianoView {
 }
 
 /**
- * How recently a piano must have been seen to count as online by the database alone: its status
- * reaches the database at most once a minute, every 30 s at most apart, so 3 minutes is a margin.
+ * How recently a piano must have been seen to count as online by the database alone: a tablet from
+ * v1.44 reports every 5 minutes (older ones every 30 s), so 11 minutes allows for one report missed.
+ * A socket that closes marks the piano offline at once; this only catches one that vanished silently.
  */
-export const FRESH_MS = 3 * 60 * 1000;
+export const FRESH_MS = 11 * 60 * 1000;
 
 export function pianoView(row: Omit<PianoRow, 'secret_hash' | 'pending_secret_hash'>, now: number): PianoView {
   let status: TabletStatus | null = null;

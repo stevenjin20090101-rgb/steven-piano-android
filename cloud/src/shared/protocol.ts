@@ -15,7 +15,7 @@
  *   [SUBPROTOCOL]. Text frames are JSON of at most [MAX_TEXT_FRAME] bytes; binary frames are
  *   `id: u32 big-endian | kind: u8 | payload` of at most [CHUNK] bytes ([Kind]).
  * - The room says `hello` on accept (with the piano's name from the console since M79); the tablet
- *   sends `status` every 30 s and after changes. A rename in the console reaches a connected tablet
+ *   sends `status` every 5 minutes (every 30 s before v1.44) and after changes. A rename in the console reaches a connected tablet
  *   at once as `name` (M79).
  * - A browser's request is `req` (+ `req.chunk`s under a credit window, then `req.end`); the answer
  *   is `res` + `res.chunk`s + `res.end`. `req.credit` grants more body; `req.abort` gives up.

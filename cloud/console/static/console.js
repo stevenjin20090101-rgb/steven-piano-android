@@ -470,7 +470,7 @@
       facts.length ? h('p', { class: 'meta', text: facts.join(' · ') }) : null,
       piano.rotatingUntil ? h('p', { class: 'meta', text: 'A new secret is waiting for the tablet to confirm it.' }) : null);
 
-    // Now playing, and the transport. The time runs on from the status's (it comes every 30 s).
+    // Now playing, and the transport. The time runs on from the status's (it comes every 5 minutes and after a change).
     const playing = online && player && player.title && player.status !== 'stopped';
     let position = player ? player.positionMs || 0 : 0;
     if (playing && player.status === 'playing' && online && live && live.statusAt) position += Math.max(0, serverNow() - live.statusAt);
