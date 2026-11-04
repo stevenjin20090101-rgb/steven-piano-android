@@ -137,8 +137,8 @@ class LibraryService : ForegroundJobService(ID) {
 
     companion object {
         private const val TAG = "Library"
-        private const val ID = 9
-        private const val OPEN_REQUEST = 11
+        private const val ID = 13   // 9 is Studio's result
+        private const val OPEN_REQUEST = 13   // 11 is Studio's open
         private const val CANCEL_REQUEST = 12
         private const val UPDATE_MS = 400L
         private const val PROGRESS_MAX = 1_000

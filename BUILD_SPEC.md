@@ -198,3 +198,29 @@ either slash and any case, null when missing, and `openCover` from beside the in
 ## The release: 1.43 (versionCode 54)
 
 Album covers from the song zip (INDEX.csv's `cover`).
+
+# v1.44 — the audit: less background traffic, and code a run can read
+
+Nothing a person sees changes, but for a notification that no longer clashes.
+
+- **The relay's retry.** `WebService`'s 30-second look no longer nudges `RelayClient`, whose 1 s × 2ⁿ wait never got past about
+  30 s because of it. Only a real network change ends the wait now, so a relay that's down gets a try every 5 minutes at most.
+- **The status.** `RelayClient.STATUS_EVERY_MS` goes from 30 s to 5 minutes; a change still goes within `STATUS_SETTLE_MS`. The
+  status is what refreshes a piano's row, so the relay's `FRESH_MS` goes from 3 to 11 minutes. **Deploy the relay and the
+  console before publishing**, or the console shows idle tablets as offline. A socket that closes still reads offline at once;
+  one that vanishes silently now takes up to 11 minutes.
+- **The panel's loops.** `WebSocketHub`'s progress and ping loops wait for a client instead of ticking for nobody. The keyboard's
+  polls (`NavHost`, `KeysScreen`) stay: `publishHeld` runs on the port's thread, under the keyboard's lock, before notes fan out,
+  and every way to main takes a monitor there. They only run with a MIDI keyboard chosen.
+- **`AppGraph` by area.** 1,961 lines become 832 and six `*Wiring.kt` files, moved line for line. `start()` is unchanged, and
+  forwarders keep every `graph.x` where it was. Each wiring class is built ahead of the graph's other fields, so it may hold only
+  what is lazy or plain state: an eager field there must not read the graph.
+- **`ForegroundJobService`.** The six job services share their scope, foreground start and stop, and channel set-up.
+- **A clash.** `LibraryService`'s notification ID and open request were Studio's (9 and 11): one notification could replace the
+  other, and a tap open the other's tab. They're 13 now.
+- **The docs.** `docs/CURRENT.md` is the starting page; older sections moved word for word to `docs/archive/`. `tools/release.sh`
+  sets the version everywhere, runs the gate, commits and re-signs.
+
+Seen on the emulator (`steven_piano`, the fake plug): the app starts with no error from its process; a two-part send of 1,203
+songs and 997 covers through the panel; the plug paired, the piano on, a piece played from the panel; `trunk dead` gave `CHECK: 0
+of 7 boards` and `TrunkFault(answered=0, total=7, cut=true)` with the 24 V off.

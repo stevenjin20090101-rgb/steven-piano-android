@@ -33,7 +33,7 @@ Under `app/src/main/java/dev/stevenjin/stevenpiano/`:
 
 | Package | What it holds |
 |---|---|
-| `AppGraph*.kt` | The wiring: what exists, in what order it starts |
+| `AppGraph.kt`, `*Wiring.kt` | The wiring, by area (library, studio, update, web, power, safety); `AppGraph.start()` sets the order |
 | `power/` | The 24 V rail on its plug: `RailKeeper` (the watchdog), `BoardWatch`, `PowerWatch`, `PlugAdverts` |
 | `safety/` | The safety check that must pass before and between pieces |
 | `ble/`, `piano/` | The Bluetooth link, the piano's settings and its lock |
