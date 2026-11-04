@@ -14,10 +14,15 @@ import dev.stevenjin.stevenpiano.web.Sessions.Transport.TAILNET
 import fi.iki.elonen.NanoWSD
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -285,6 +290,39 @@ class WebSocketHubTest {
         hub.stop()
         assertEquals(listOf("1001 The panel is off."), member.closes.toList())
         assertEquals(0, hub.memberCount)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `with nobody connected the progress and pings wait, then run a full period after the first client arrives`() = runTest {
+        val progress = AtomicInteger()
+        val checks = AtomicInteger()
+        val idle = WebSocketHub(
+            stateMessage = { "{}" },
+            progressMessage = { progress.incrementAndGet(); null },
+            sessionValid = { _, _ -> checks.incrementAndGet(); true },
+            pingMs = 400,
+            progressMs = 1_000,
+        )
+        idle.start(CoroutineScope(StandardTestDispatcher(testScheduler)), emptyFlow())
+        advanceTimeBy(1_100)   // off the beat of a timer that ran from the start
+        val member = idle.attach("token", {}, { _, _ -> })!!
+        advanceTimeBy(399)
+        assertEquals("no ping yet", 0, checks.get())
+        advanceTimeBy(2)
+        assertEquals("the first ping, a period after it arrived", 1, checks.get())
+        advanceTimeBy(598)
+        assertEquals("no progress yet", 0, progress.get())
+        advanceTimeBy(2)
+        assertEquals("the first progress, a period after it arrived", 1, progress.get())
+        member.detach()
+        advanceTimeBy(10_000)
+        val heard = progress.get() to checks.get()
+        idle.attach("token", {}, { _, _ -> })
+        advanceTimeBy(1_001)
+        assertEquals("nothing while nobody was there, then a period again", heard.first + 1, progress.get())
+        assertEquals(heard.second + 2, checks.get())
+        idle.stop()
     }
 
     /** A relayed browser's side as the relay client keeps it: what the hub sends and why it closes. */

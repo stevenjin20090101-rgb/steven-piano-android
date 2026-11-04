@@ -16,8 +16,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -50,6 +53,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Each socket carries its transport (v1.24 — M56): a listener's socket is the tablet's own address's
  * ([Sessions.Transport.TAILNET]), a member the relay's ([Sessions.Transport.RELAY]), and its session
  * is checked on that transport alone.
+ *
+ * The progress and the pings run only while a socket or a member is connected ([awaitClient]): with
+ * nobody there no timer is held, and each starts one [progressMs] or [pingMs] after the first one arrives.
  */
 class WebSocketHub(
     private val stateMessage: suspend () -> String,
@@ -66,6 +72,9 @@ class WebSocketHub(
     private val open = CopyOnWriteArrayList<HubSocket>()
     private val members = CopyOnWriteArrayList<Member>()
     private var jobs: List<Job> = emptyList()
+
+    /** Moved after each socket or member is listed: what wakes the loops waiting in [awaitClient]. */
+    private val arrivals = MutableStateFlow(0L)
 
     @Volatile
     private var scope: CoroutineScope? = null
@@ -98,6 +107,7 @@ class WebSocketHub(
             if (members.size >= maxMembers) return null
             Member(token, send, close).also { members += it }
         }
+        arrivals.update { it + 1 }
         scope?.launch {
             val first = try {
                 stateMessage()
@@ -128,6 +138,7 @@ class WebSocketHub(
             },
             scope.launch {
                 while (isActive) {
+                    awaitClient()
                     delay(progressMs)
                     if (open.isEmpty() && members.isEmpty()) continue
                     progressMessage()?.let { broadcast(it) }
@@ -140,6 +151,7 @@ class WebSocketHub(
             },
             scope.launch {
                 while (isActive) {
+                    awaitClient()
                     delay(pingMs)
                     for (socket in open) socket.keepAlive()
                     for (member in members) if (!sessionValid(member.token, member.transport)) member.end(CLOSE_SESSION_ENDED, "The session has ended.")
@@ -157,6 +169,11 @@ class WebSocketHub(
         open.clear()
         for (member in members) member.end(NanoWSD.WebSocketFrame.CloseCode.GoingAway.value, "The panel is off.")
         members.clear()
+    }
+
+    /** Returns once a socket or a member is connected, at once if one already is. */
+    private suspend fun awaitClient() {
+        arrivals.first { open.isNotEmpty() || members.isNotEmpty() }
     }
 
     private fun broadcast(text: String) {
@@ -206,6 +223,7 @@ class WebSocketHub(
 
         override fun onOpen() {
             open += this
+            arrivals.update { it + 1 }
             val first = try {
                 runBlocking { stateMessage() }
             } catch (e: CancellationException) {
