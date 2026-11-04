@@ -12,19 +12,14 @@ package dev.stevenjin.stevenpiano.service
 import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
@@ -35,8 +30,6 @@ import dev.stevenjin.stevenpiano.ui.UpdateCopy
 import dev.stevenjin.stevenpiano.update.UpdateManifest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -47,12 +40,9 @@ import kotlinx.coroutines.launch
  * ([dev.stevenjin.stevenpiano.update.Updater.install]). Cancel, or Android's time for data sync
  * running out ([onTimeout]), stops the download; the release stays on offer.
  */
-class UpdateService : Service() {
-    private val scope = MainScope()
+class UpdateService : ForegroundJobService(ID) {
     private var job: Job? = null
     private var lastPostedAt = 0L
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
@@ -62,7 +52,7 @@ class UpdateService : Service() {
         val updater = graph.updater
         val manifest = updater.state.value.manifest
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(manifest, 0L), DATA_SYNC)
+            startInForeground(notificationFor(manifest, 0L))
         } catch (e: RuntimeException) {   // refused (the app went to the background meanwhile): download without the notification
             Log.w(TAG, "Downloading without the foreground service: ${e.javaClass.simpleName}")
             if (manifest != null && job?.isActive != true) graph.appScope.launch { updater.downloadAndInstall(manifest, applicationContext) }
@@ -87,24 +77,10 @@ class UpdateService : Service() {
         return START_NOT_STICKY
     }
 
-    override fun onTimeout(startId: Int) = cancelForTimeout()
-
     /** Android 15's six hours a day for data sync ran out: the download stops; the release stays on offer. */
-    override fun onTimeout(startId: Int, fgsType: Int) = cancelForTimeout()
-
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
-    }
-
-    private fun cancelForTimeout() {
+    override fun stopForTimeout() {
         job?.cancel()
         finish()
-    }
-
-    private fun finish() {
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     /** At most a few updates a second: Android drops notifications that change faster. */
@@ -152,9 +128,6 @@ class UpdateService : Service() {
     )
 
     companion object {
-        /** The service's type from Android 10, where types began; before it, none is passed. */
-        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-
         const val CHANNEL_ID = "updates"
         private const val ID = 4
         private const val TAG = "Updates"
@@ -163,12 +136,7 @@ class UpdateService : Service() {
         private const val ACTION_CANCEL = "dev.stevenjin.stevenpiano.action.CANCEL_UPDATE"
 
         fun createChannel(context: Context) {
-            val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("Updates")
-                .setDescription("Progress while a new version of Steven Piano downloads.")
-                .setShowBadge(false)
-                .build()
-            NotificationManagerCompat.from(context).createNotificationChannel(channel)
+            createJobChannel(context, CHANNEL_ID, "Updates", "Progress while a new version of Steven Piano downloads.")
         }
 
         /** Downloads the release on offer. Call it while the app is in the foreground (the Update button). */

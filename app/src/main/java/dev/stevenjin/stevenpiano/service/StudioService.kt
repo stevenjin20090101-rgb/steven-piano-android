@@ -12,19 +12,14 @@ package dev.stevenjin.stevenpiano.service
 import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
@@ -35,8 +30,6 @@ import dev.stevenjin.stevenpiano.studio.StudioJob
 import dev.stevenjin.stevenpiano.ui.Route
 import dev.stevenjin.stevenpiano.ui.StudioCopy
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -50,14 +43,11 @@ import kotlinx.coroutines.launch
  * start (the app in the background) leaves the jobs running in the app's process, without the
  * notification.
  */
-class StudioService : Service() {
-    private val scope = MainScope()
+class StudioService : ForegroundJobService(ID) {
     private var watching: Job? = null
     private var lastPostedAt = 0L
     private var lastShown: StudioJob? = null
     private val seen = HashSet<Long>()
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val studio = graph.studio
@@ -67,7 +57,7 @@ class StudioService : Service() {
         }
         val current = shown(studio.jobs.jobs.value)
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(current), DATA_SYNC)
+            startInForeground(notificationFor(current))
         } catch (e: RuntimeException) {   // refused: the jobs go on in the app's process, without the notification
             Log.w(TAG, "Studio without the foreground service: ${e.javaClass.simpleName}")
             stopSelf(startId)
@@ -85,17 +75,8 @@ class StudioService : Service() {
         return START_NOT_STICKY
     }
 
-    override fun onTimeout(startId: Int) = cancelForTimeout()
-
     /** Android's time for data sync ran out: every job stops, and the service ends. */
-    override fun onTimeout(startId: Int, fgsType: Int) = cancelForTimeout()
-
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
-    }
-
-    private fun cancelForTimeout() {
+    override fun stopForTimeout() {
         val studio = graph.studio
         studio.jobs.jobs.value.filter { !it.state.finished }.forEach { studio.cancel(it.id) }
         finish(studio.jobs.jobs.value)
@@ -108,7 +89,7 @@ class StudioService : Service() {
     /** None is left: the notification goes, one line says how the last job this service followed ended, and the service stops. */
     private fun finish(jobs: List<StudioJob>) {
         watching?.cancel()
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        leaveForeground()
         jobs.lastOrNull { it.id in seen && it.state.finished && it.state != JobState.Cancelled }?.let { notify(RESULT_ID, result(it)) }
         stopSelf()
     }
@@ -194,16 +175,8 @@ class StudioService : Service() {
         private const val PROGRESS_MAX = 1_000
         private const val ACTION_CANCEL = "dev.stevenjin.stevenpiano.action.CANCEL_STUDIO"
 
-        /** The service's type from Android 10, where types began; before it, none is passed. */
-        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-
         fun createChannel(context: Context) {
-            val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("Studio")
-                .setDescription("Progress while a model downloads, a recording is transcribed or a piece is composed, and how it ended.")
-                .setShowBadge(false)
-                .build()
-            NotificationManagerCompat.from(context).createNotificationChannel(channel)
+            createJobChannel(context, CHANNEL_ID, "Studio", "Progress while a model downloads, a recording is transcribed or a piece is composed, and how it ended.")
         }
 
         /** Follows the jobs Studio has just been given. Android refuses it from the background (the jobs run all the same). */

@@ -12,19 +12,14 @@ package dev.stevenjin.stevenpiano.service
 import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
@@ -33,8 +28,6 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ArtworkCopy
 import dev.stevenjin.stevenpiano.ui.Route
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -47,21 +40,18 @@ import kotlinx.coroutines.launch
  * covers, follows the one artwork worker, and stops once the worker is idle. When Android's time limit for data sync runs out ([onTimeout]) it
  * stops cleanly; whatever was left is fetched on the next start.
  */
-class ArtworkService : Service() {
-    private val scope = MainScope()
+class ArtworkService : ForegroundJobService(ID) {
     private var watcher: Job? = null
     private var pending = 0
     private var latestStartId = 0
     private var lastPostedAt = 0L
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStartId = startId
         val artwork = graph.artwork
         val force = intent?.getBooleanExtra(EXTRA_FORCE, false) ?: false
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(artwork.progress.value), DATA_SYNC)
+            startInForeground(notificationFor(artwork.progress.value))
         } catch (e: RuntimeException) {   // refused (the app went to the background meanwhile): fetch without the notification
             Log.w(TAG, "Fetching artwork without the foreground service: ${e.message}")
             graph.appScope.launch { artwork.requestDue(force) }
@@ -84,27 +74,16 @@ class ArtworkService : Service() {
         return START_NOT_STICKY
     }
 
-    /** Android 14's limit for short services; not expected for dataSync, handled the same way. */
-    override fun onTimeout(startId: Int) = stopForTimeout()
-
     /** Android 15's six hours a day for data sync ran out: stop now; the rest waits for the next start. */
-    override fun onTimeout(startId: Int, fgsType: Int) = stopForTimeout()
-
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
-    }
-
-    private fun stopForTimeout() {
+    override fun stopForTimeout() {
         graph.artwork.cancelBackground()
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        finish()
     }
 
     /** The worker is idle: stop, unless another start is still queueing its composers. */
     private fun finishIfDone() {
         if (pending > 0) return
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        leaveForeground()
         stopSelf(latestStartId)
     }
 
@@ -143,9 +122,6 @@ class ArtworkService : Service() {
     )
 
     companion object {
-        /** The service's type from Android 10, where types began; before it, none is passed. */
-        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-
         const val CHANNEL_ID = "artwork"
         private const val ID = 3
         private const val TAG = "ArtworkService"
@@ -153,12 +129,7 @@ class ArtworkService : Service() {
         private const val EXTRA_FORCE = "dev.stevenjin.stevenpiano.extra.FORCE"
 
         fun createChannel(context: Context) {
-            val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("Artwork")
-                .setDescription("Progress while composers' portraits and notes come from Wikipedia, and album covers from Apple.")
-                .setShowBadge(false)
-                .build()
-            NotificationManagerCompat.from(context).createNotificationChannel(channel)
+            createJobChannel(context, CHANNEL_ID, "Artwork", "Progress while composers' portraits and notes come from Wikipedia, and album covers from Apple.")
         }
 
         /**
