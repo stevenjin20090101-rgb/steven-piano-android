@@ -12,20 +12,16 @@ package dev.stevenjin.stevenpiano.service
 import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.MainActivity
 import dev.stevenjin.stevenpiano.R
@@ -35,8 +31,6 @@ import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.FirmwareCopy
 import dev.stevenjin.stevenpiano.ui.Route
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -51,16 +45,13 @@ import kotlinx.coroutines.launch
  * app went to the background, or a Bluetooth permission missing) leaves the transfer running
  * in-process without the notification.
  */
-class FirmwareService : Service() {
-    private val scope = MainScope()
+class FirmwareService : ForegroundJobService(ID, CONNECTED_DEVICE) {
     private var watching: Job? = null
     private var lastPostedAt = 0L
     private var sawBusy = false
     private val wakeLock: PowerManager.WakeLock by lazy {
         getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply { setReferenceCounted(false) }
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val updater = graph.firmwareUpdater
@@ -69,7 +60,7 @@ class FirmwareService : Service() {
             return START_NOT_STICKY
         }
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(updater.state.value), CONNECTED_DEVICE)
+            startInForeground(notificationFor(updater.state.value))
         } catch (e: RuntimeException) {   // refused: the update goes on in the app's process, without the notification
             Log.w(TAG, "Updating the piano without the foreground service: ${e.javaClass.simpleName}")
             stopSelf(startId)
@@ -91,18 +82,13 @@ class FirmwareService : Service() {
         return START_NOT_STICKY
     }
 
-    override fun onTimeout(startId: Int) = cancelForTimeout()
-
-    /** Android's time for this type ran out: the update is cancelled cleanly (ABORT before END), and the service ends. */
-    override fun onTimeout(startId: Int, fgsType: Int) = cancelForTimeout()
-
     override fun onDestroy() {
         if (wakeLock.isHeld) wakeLock.release()
-        scope.cancel()
         super.onDestroy()
     }
 
-    private fun cancelForTimeout() {
+    /** Android's time for this type ran out: the update is cancelled cleanly (ABORT before END), and the service ends. */
+    override fun stopForTimeout() {
         graph.firmwareUpdater.cancel()
         finish(graph.firmwareUpdater.state.value)
     }
@@ -110,7 +96,7 @@ class FirmwareService : Service() {
     /** The transfer is over: the notification goes, one line says how it ended (not after a cancel), and the service stops. */
     private fun finish(state: FirmwareState) {
         watching?.cancel()
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        leaveForeground()
         if (wakeLock.isHeld) wakeLock.release()
         if (sawBusy) outcome(state)?.let { line -> notify(RESULT_ID, result(line)) }
         stopSelf()
@@ -198,12 +184,7 @@ class FirmwareService : Service() {
         private val CONNECTED_DEVICE = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
 
         fun createChannel(context: Context) {
-            val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("Piano firmware")
-                .setDescription("Progress while the piano's firmware updates, and how it ended.")
-                .setShowBadge(false)
-                .build()
-            NotificationManagerCompat.from(context).createNotificationChannel(channel)
+            createJobChannel(context, CHANNEL_ID, "Piano firmware", "Progress while the piano's firmware updates, and how it ended.")
         }
 
         /** Follows the update the Firmware page has just started. Call it while the app is in the foreground. */

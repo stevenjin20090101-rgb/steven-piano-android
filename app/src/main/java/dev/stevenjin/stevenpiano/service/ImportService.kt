@@ -12,21 +12,16 @@ package dev.stevenjin.stevenpiano.service
 import android.Manifest
 import android.app.Notification
 import android.app.PendingIntent
-import android.app.Service
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
-import android.os.IBinder
 import android.os.SystemClock
 import android.util.Log
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dev.stevenjin.stevenpiano.BuildConfig
 import dev.stevenjin.stevenpiano.MainActivity
@@ -38,8 +33,6 @@ import dev.stevenjin.stevenpiano.ui.ImportCopy
 import dev.stevenjin.stevenpiano.ui.Route
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -56,19 +49,16 @@ import kotlinx.coroutines.launch
  * Android 15 and later), the import runs in the app's own scope without the notification, as the
  * artwork does (v1.25 — M58).
  */
-class ImportService : Service() {
-    private val scope = MainScope()
+class ImportService : ForegroundJobService(ID) {
     private var running = 0
     private var progressJob: Job? = null
     private val imports = mutableListOf<Job>()
     private var lastPostedAt = 0L
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val request = intent?.let(::requestOf)
         try {
-            ServiceCompat.startForeground(this, ID, notificationFor(graph.importProgress.value), DATA_SYNC)
+            startInForeground(notificationFor(graph.importProgress.value))
         } catch (e: RuntimeException) {   // refused (in the background, or the day's time for data sync spent): the import goes on without the notification
             Log.w(TAG, "Importing without the foreground service: ${e.javaClass.simpleName}")
             request?.let { importInApp(applicationContext, it) }
@@ -93,27 +83,16 @@ class ImportService : Service() {
         return START_NOT_STICKY
     }
 
-    override fun onTimeout(startId: Int) = stopForTimeout()
-
     /** Android 15's six hours a day for data sync ran out: the imports stop, and so does the service, now. */
-    override fun onTimeout(startId: Int, fgsType: Int) = stopForTimeout()
-
-    private fun stopForTimeout() {
+    override fun stopForTimeout() {
         imports.forEach { it.cancel() }   // each releases its grants as it ends
         imports.clear()
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
-    }
-
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
+        finish()
     }
 
     private fun stopIfIdle() {
         if (running > 0) return
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        finish()
     }
 
     /** At most a few updates a second: Android drops notifications that change faster. */
@@ -165,9 +144,6 @@ class ImportService : Service() {
     }
 
     companion object {
-        /** The service's type from Android 10, where types began; before it, none is passed. */
-        private val DATA_SYNC = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
-
         private const val TAG = "ImportService"
         const val CHANNEL_ID = "imports"
         private const val ID = 2
@@ -179,12 +155,7 @@ class ImportService : Service() {
         private const val KIND_ZIP = "zip"
 
         fun createChannel(context: Context) {
-            val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("Imports")
-                .setDescription("Progress while MIDI files come into the library.")
-                .setShowBadge(false)
-                .build()
-            NotificationManagerCompat.from(context).createNotificationChannel(channel)
+            createJobChannel(context, CHANNEL_ID, "Imports", "Progress while MIDI files come into the library.")
         }
 
         /**
