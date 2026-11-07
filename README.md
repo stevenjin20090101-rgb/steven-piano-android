@@ -263,7 +263,14 @@ on the tablet*). Made by Steven Jin. Version 1.44.
   **Fine tuning** (folded until you open it) the velocity curve, the strike floors
   and ceiling (with a strike test), the key-force readings, timing, release and
   drive; then *Save to the piano now*. **Lights and screen**: the strip on or off,
-  mode, brightness and palette; under **Strip set-up** its length, offset, scale,
+  mode, brightness and palette. From 1.45, with piano firmware 2.1.2 or later: **Colour**,
+  where the strip's colour comes from (*Album art*: the playing piece's cover, fading to the
+  next; *Custom*: one picked from swatches or with hue and saturation, kept on the piano;
+  *Palette*: the palettes as before, Reactive only), and in Reactive with Album art or
+  Custom a **Background glow** (Off, Low, Medium, High) under the lit notes. A grey cover,
+  or none, shows the custom colour. These are the tablet's alone, not the web panel's.
+  Under **Strip set-up** its length, offset, scale, and **Colour change** (Instant to 3 s): how
+  long the strip fades to a new colour; also
   glow, fade and a *Test LED* that lights one key's LED to line the strip up; then
   the piano's own screen. **Pedal**: on, half-pedalling, up and down positions.
   **Firmware and status**: the piano's firmware version, the power boards, I²C

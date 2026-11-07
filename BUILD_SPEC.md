@@ -235,3 +235,15 @@ Uses less of the shared cloud allowance, and waits properly before trying again 
 safety card's `Cooling` (Play refused while cooling) has **Skip the cool-down**: `SafetyRunner.holdCooling()` calls off the
 card's 8-second moment, then the kiosk gate, then the confirm; Skip is `graph.skipCooling()` (as Piano › Power plug's), and
 any answer closes the card (`dismiss`). The check due stays due, and runs at the next Play.
+
+# v1.45 — M80: the strip's colour from the cover, or picked
+
+Firmware 2.1.2's keys, as `name value` lines (no `set`): `ledcolor RRGGBB` (lower case read back, kept by `save`), `ledtint
+RRGGBB|off` (never kept; a restart clears it), `ledfade 0..5000` ms, `ledambient 0..64` (only in Reactive with `reactcolor=1`);
+the fact `!ledcolorproto=1` after `!restartproto`; the four after `rainspeed` in `dump`. `piano/LedColour.kt` holds the rules (which
+choice sends what, which rows show, the values); `piano/LedColourKeeper.kt` sends the tint at each piece load, at connect and when the
+choice changes, each value at most once a connection and only when the piano holds another, never without the fact or a writable lock.
+`PianoSettingsRepository.tint()` is always a temporary write that holds nothing back; `set()` refuses `ledtint`; a test checks a save
+never carries it. The cover's colour is `artLedColour` (`data/art/ArtPalette.kt`), cached in `ArtworkRepository`. The choice is the
+tablet's setting (`Settings`, default Palette: today's look). The emulated piano speaks 2.1.2's dump order, read-back and refusals, and logs
+`LED strip: …`.

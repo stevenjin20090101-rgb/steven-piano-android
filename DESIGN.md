@@ -372,3 +372,21 @@ the last and plainest): the kiosk PIN while the kiosk keeps the settings locked,
 coils may still be hot. Skip the 10-minute cool-down?", Skip and Cancel). The card stays up while they're asked, and closes
 once answered; skipped, the next Play runs the safety check the fault called for, every key, as before. The tablet only:
 the panel never skips a cool-down, as nobody there can see the piano.
+
+# v1.45 — M80: the LED strip in the album art's colour, or one picked at the tablet
+
+Steven (2026-11-07, multiple choice): exact cover colours, "all of the above with options" for the looks, and "pick a custom
+colour right at the tablet". Piano firmware 2.1.2 (the Player Piano chat) gives the strip `ledcolor` (kept), `ledtint` (live,
+never kept), `ledfade` and `ledambient`; nothing new shows until a piano says `!ledcolorproto=1`.
+
+- **Piano › Lights and screen** gains **Colour** (Album art · Custom · Palette; Palette only in Reactive, as the palettes
+  only colour notes), **Custom colour** (twelve named swatches, then Hue and Saturation, the chosen one ringed and shown at
+  the row's end), and in Reactive with Album art or Custom **Background glow** (Off · Low · Medium · High). Under Strip
+  set-up, MOTION gains **Colour change** (Instant · 0.5 s · 1.5 s · 3 s). Rows that don't apply grow out of the page, a cut
+  under reduced motion.
+- **The cover's colour** comes from the backdrop's own histogram: the most vivid colour with a fair share, raised to at
+  least 0.55 saturation and full value, as LEDs show grey and dark badly. A grey cover, or none, shows the custom colour.
+- **LED colours are content:** they're the piano's, so the one-meaning-per-colour rule of the app's chrome doesn't bind
+  them; the swatches have no glass, and the page's own chrome stays monochrome.
+- A palette chosen elsewhere (the web panel, the piano's screen) moves the tablet's Colour to Palette rather than forcing
+  Solid back. The web panel shows none of this.
