@@ -17,7 +17,8 @@
 #   1. checks: the version name and the notes, a clean tree on main, no tag of that name yet;
 #   2. sets the version everywhere it is written: versionCode (one higher) and versionName in
 #      app/build.gradle.kts, Provenance.text, the README's two lines, a "The release" section at the end of
-#      BUILD_SPEC.md, and the drafted entry at the end of releases/history.json;
+#      BUILD_SPEC.md, and the drafted entry at the end of releases/history.json (in place of a draft never published, which
+#      this release then carries); every edit is checked before any is written;
 #   3. runs the gate (the unit tests, lint, the debug build);
 #   4. commits, re-signs provenance, checks the signature and commits provenance/.
 # When the gate fails the edits stay uncommitted, to fix; `git checkout .` starts over.
@@ -61,13 +62,15 @@ import re
 from pathlib import Path
 
 
+planned = {}   # path -> its new text: nothing is written until every edit has been found
+
+
 def swap(path, pattern, make, count=1):
-    """The match of [pattern] in [path] replaced by what [make] returns, exactly [count] times or stop."""
-    file = Path(path)
-    text, n = re.subn(pattern, make, file.read_text(encoding="utf-8"), flags=re.M)
+    """The match of [pattern] in [path] replaced by what [make] returns, exactly [count] times or stop, writing nothing."""
+    text, n = re.subn(pattern, make, planned.get(path) or Path(path).read_text(encoding="utf-8"), flags=re.M)
     if n != count:
-        raise SystemExit(f"release: {path}: expected {count} of /{pattern}/, found {n}. Nothing was committed.")
-    file.write_text(text, encoding="utf-8")
+        raise SystemExit(f"release: {path}: expected {count} of /{pattern}/, found {n}. Nothing was changed.")
+    planned[path] = text
 
 
 version, notes = os.environ["VERSION"], os.environ["NOTES"]
@@ -78,22 +81,29 @@ if version == old_name:
     raise SystemExit(f"release: the version is {version} already.")
 code = old_code + 1
 
+# A release prepared and never published (its entry still a draft) gives way: this one carries it, as 1.42 carried 1.41.
+history_file = Path("releases/history.json")
+raw = history_file.read_text(encoding="utf-8")
+history = json.loads(raw)
+if any(entry.get("tag") == f"v{version}" for entry in history):
+    raise SystemExit(f"release: releases/history.json has v{version} already. Nothing was changed.")
+for entry in history:
+    if entry.get("draft"):
+        print(f"{entry.get('tag')} was never published: {version} takes its place and carries it.")
+history = [entry for entry in history if not entry.get("draft")]
+history.append({"versionCode": code, "versionName": version, "notes": notes, "tag": f"v{version}", "draft": True})
+planned["releases/history.json"] = json.dumps(history, indent=2, ensure_ascii=False) + ("\n" if raw.endswith("\n") else "")
+
 swap("app/build.gradle.kts", r'(versionCodeOverride"\)\.orNull\?\.toIntOrNull\(\) \?: )\d+', lambda m: f"{m[1]}{code}")
 swap("app/build.gradle.kts", r'versionName = "[^"]+"', lambda m: f'versionName = "{version}"')
 swap("app/src/main/java/dev/stevenjin/stevenpiano/Provenance.kt", r"· v[^ ]+ ·", lambda m: f"· v{version} ·")
 swap("README.md", rf"Made by Steven Jin\. Version {re.escape(old_name)}\.", lambda m: f"Made by Steven Jin. Version {version}.")
 swap("README.md", rf"steven-piano-{re.escape(old_name)}\.apk", lambda m: f"steven-piano-{version}.apk")
+spec = Path("BUILD_SPEC.md").read_text(encoding="utf-8")
+planned["BUILD_SPEC.md"] = spec.rstrip("\n") + f"\n\n## The release: {version} (versionCode {code})\n\n{notes}\n"
 
-spec = Path("BUILD_SPEC.md")
-spec.write_text(spec.read_text(encoding="utf-8").rstrip("\n") + f"\n\n## The release: {version} (versionCode {code})\n\n{notes}\n", encoding="utf-8")
-
-history_file = Path("releases/history.json")
-raw = history_file.read_text(encoding="utf-8")
-history = json.loads(raw)
-if any(entry.get("draft") for entry in history):
-    raise SystemExit("release: releases/history.json has a drafted release already.")
-history.append({"versionCode": code, "versionName": version, "notes": notes, "tag": f"v{version}", "draft": True})
-history_file.write_text(json.dumps(history, indent=2, ensure_ascii=False) + ("\n" if raw.endswith("\n") else ""), encoding="utf-8")
+for path, text in planned.items():
+    Path(path).write_text(text, encoding="utf-8")
 print(f"{old_name} (code {old_code}) -> {version} (code {code})")
 PY
 
