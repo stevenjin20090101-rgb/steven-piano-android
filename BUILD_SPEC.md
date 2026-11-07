@@ -247,3 +247,7 @@ choice changes, each value at most once a connection and only when the piano hol
 never carries it. The cover's colour is `artLedColour` (`data/art/ArtPalette.kt`), cached in `ArtworkRepository`. The choice is the
 tablet's setting (`Settings`, default Palette: today's look). The emulated piano speaks 2.1.2's dump order, read-back and refusals, and logs
 `LED strip: …`.
+
+## The release: 1.45 (versionCode 56)
+
+The LED strip can follow each piece's album art, or a colour you pick on the tablet, with smooth fades and an optional background glow (needs piano firmware 2.1.2). After a power fault the cool-down is 10 minutes, and its popup can skip it with the kiosk PIN; the safety check still runs. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.

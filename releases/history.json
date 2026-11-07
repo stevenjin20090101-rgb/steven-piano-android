@@ -506,10 +506,10 @@
     "publishedAt": "2026-11-03"
   },
   {
-    "versionCode": 55,
-    "versionName": "1.44",
-    "notes": "Uses less of the shared cloud allowance, and waits properly before trying again when the cloud is down. The library's download notification no longer clashes with Studio's. Tidying inside the app, with nothing else changed for you.",
-    "tag": "v1.44",
+    "versionCode": 56,
+    "versionName": "1.45",
+    "notes": "The LED strip can follow each piece's album art, or a colour you pick on the tablet, with smooth fades and an optional background glow (needs piano firmware 2.1.2). After a power fault the cool-down is 10 minutes, and its popup can skip it with the kiosk PIN; the safety check still runs. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.",
+    "tag": "v1.45",
     "draft": true
   }
 ]
