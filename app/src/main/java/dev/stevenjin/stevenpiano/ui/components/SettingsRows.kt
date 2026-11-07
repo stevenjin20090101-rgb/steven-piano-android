@@ -278,8 +278,9 @@ fun SliderRow(
 
 /**
  * One of a few named [options], as a row of chips under the label; the chosen one carries a check.
- * [selected] null: none known yet. TalkBack reads each chip as "label, option". [note], when there is
- * one, says under the chips what the choice does (the eyebrow's size, sentence case, secondary).
+ * [selected] null: none known yet. TalkBack reads each chip as "label, option" ([spoken]: each option as it is said,
+ * where the chip's words read badly aloud, "0.5 s"). [note], when there is one, says under the chips what the choice
+ * does (the eyebrow's size, sentence case, secondary).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -291,6 +292,7 @@ fun ChoiceRow(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     note: String? = null,
+    spoken: List<String>? = null,
 ) {
     Column(
         modifier
@@ -311,7 +313,7 @@ fun ChoiceRow(
                     selected = chosen,
                     onClick = { onSelect(index) },
                     label = { Text(option) },
-                    modifier = Modifier.pressScale(press).semantics { contentDescription = "$label, $option" },
+                    modifier = Modifier.pressScale(press).semantics { contentDescription = "$label, ${spoken?.getOrNull(index) ?: option}" },
                     interactionSource = press,
                     enabled = enabled,
                     leadingIcon = if (chosen) {

@@ -292,6 +292,45 @@ class PianoSettingsRepositoryTest {
     }
 
     @Test
+    fun `the strip's tint is never saved, and the colour is (M80)`() = runTest {
+        val repo = connected()
+        console.clearSent()
+        repo.tint("3a7bd5")
+        settle()
+        assertEquals(listOf("ledtint 3a7bd5", "get ledtint"), console.sent)
+        assertEquals("3a7bd5", repo.ready().values["ledtint"])
+        console.clearSent()
+        repo.leave()
+        assertTrue("a tint alone asks for no save", console.sent.isEmpty())
+        repo.set("ledtint", "ff0000")   // never a person's setting, so never a saved write
+        settle()
+        assertTrue(console.sent.isEmpty())
+        repo.set("ledcolor", "ff8800")
+        repo.tint("off")
+        settle()
+        console.clearSent()
+        repo.leave()
+        assertEquals("the colour is saved; the tint went before and is not part of it", listOf("save"), console.sent)
+        repo.tint("2bff3a")
+        settle()
+        console.clearSent()
+        repo.leave()
+        assertTrue("a tint after the save asks for none", console.sent.isEmpty())
+    }
+
+    @Test
+    fun `a piano without the strip's colour is sent none of it (M80)`() = runTest {
+        val older = FakeConsole(EmulatedConsole(ledColour = false)::handle)
+        val repo = connected(older)
+        older.clearSent()
+        repo.tint("3a7bd5")
+        repo.set("ledcolor", "ff8800")
+        repo.set("ledambient", "24")
+        settle()
+        assertTrue(older.sent.isEmpty())
+    }
+
+    @Test
     fun `leaving with nothing changed, or only a refused change, saves nothing`() = runTest {
         val repo = connected()
         repo.leave()

@@ -192,6 +192,21 @@ sealed interface PianoRow {
 
     /** Sound and touch's last row: Save to the piano now (was ACTIONS' Save now). */
     data object SaveNow : PianoRow
+
+    /**
+     * STRIP (M80, on a piano that says `!ledcolorproto=1`): where the strip's colour comes from, Album art, Custom or
+     * Palette ([LedColourSource], the tablet's own choice), and with Album art what the loaded piece's cover gives.
+     */
+    data object ColourSource : PianoRow
+
+    /** STRIP (M80): the custom colour, `ledcolor`: named swatches, and any colour by hue and saturation. */
+    data object CustomColour : PianoRow
+
+    /** STRIP (M80), in Reactive on the Solid palette: a dim glow of the colour along the strip, `ledambient`. */
+    data object BackgroundGlow : PianoRow
+
+    /** MOTION (M80): how long the strip takes to fade to a new colour, `ledfade`. */
+    data object ColourChange : PianoRow
 }
 
 /** What the Piano tab may ask the piano to do besides settings. [takesKey]: followed by a MIDI key. */
@@ -318,8 +333,17 @@ object PianoSettings {
         buildList {
             if (section == PianoSection.Presets) add(PianoRow.Presets)
             facts.filter { it.section == section }.forEach { add(PianoRow.Reading(it)) }
-            inSection(section).forEach { add(PianoRow.Control(it)) }
+            for (setting in inSection(section)) {
+                // M80: the colour's own rows come before the palette, which only Palette shows.
+                if (setting.name == LedColour.PALETTE) {
+                    add(PianoRow.ColourSource)
+                    add(PianoRow.CustomColour)
+                }
+                add(PianoRow.Control(setting))
+            }
             when (section) {
+                PianoSection.Strip -> add(PianoRow.BackgroundGlow)
+                PianoSection.Motion -> add(PianoRow.ColourChange)
                 PianoSection.Touch -> {
                     add(PianoRow.KeyForceNote)
                     add(PianoRow.StrikeTest)

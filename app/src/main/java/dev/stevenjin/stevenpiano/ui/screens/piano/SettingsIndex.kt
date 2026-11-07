@@ -10,10 +10,12 @@
 package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import androidx.compose.runtime.Immutable
+import dev.stevenjin.stevenpiano.piano.LedColour
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoRow
 import dev.stevenjin.stevenpiano.piano.PianoSection
 import dev.stevenjin.stevenpiano.piano.PianoSettings
+import dev.stevenjin.stevenpiano.ui.LightsCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import java.text.Normalizer
 import java.util.Locale
@@ -77,6 +79,10 @@ object SettingsIndex {
         PianoRow.TestLed -> "test-led"
         PianoRow.ReadStatus -> "read-status"
         PianoRow.SaveNow -> "save-now"
+        PianoRow.ColourSource -> "strip-colour"   // M80: the tablet's own choice, no key of the piano's
+        PianoRow.CustomColour -> LedColour.COLOR
+        PianoRow.BackgroundGlow -> LedColour.AMBIENT
+        PianoRow.ColourChange -> LedColour.FADE
         PianoRow.KeyForceNote -> null
     }
 
@@ -141,6 +147,10 @@ object SettingsIndex {
             PianoRow.TestLed -> "Test LED"
             PianoRow.ReadStatus -> READ_STATUS
             PianoRow.SaveNow -> SAVE_TO_PIANO
+            PianoRow.ColourSource -> LightsCopy.COLOUR
+            PianoRow.CustomColour -> LightsCopy.CUSTOM_COLOUR
+            PianoRow.BackgroundGlow -> LightsCopy.BACKGROUND_GLOW
+            PianoRow.ColourChange -> LightsCopy.COLOUR_CHANGE
             PianoRow.KeyForceNote -> return null
         }
         val path = listOfNotNull(group, page.title, section.fold?.title ?: section.title)
@@ -191,6 +201,11 @@ object SettingsIndex {
         "ledmode" to listOf("rainbow", "reactive", "static"),
         "ledbright" to listOf("LEDs", "lights"),
         "reactcolor" to listOf("colours", "colors", "fire", "ocean"),
+        // M80: the strip's colour (shown on a piano with the LED colour; elsewhere the page opens at its top)
+        "strip-colour" to listOf("color", "album art", "cover", "LED colour", "LED color"),
+        LedColour.COLOR to listOf("color", "pick a colour", "hue", "swatch"),
+        LedColour.AMBIENT to listOf("ambient", "glow", "wash"),
+        LedColour.FADE to listOf("fade", "transition", "color change"),
         "ledcount" to listOf("LEDs", "length"),
         "dimsecs" to listOf("display", "dim"),
         "dimfloor" to listOf("display", "dim"),

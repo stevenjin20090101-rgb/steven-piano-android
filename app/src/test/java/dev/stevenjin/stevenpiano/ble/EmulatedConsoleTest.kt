@@ -26,8 +26,20 @@ class EmulatedConsoleTest {
             dump.take(7),
         )
         assertEquals("end", dump.last())
-        assertEquals(7 + 43 + 1, dump.size)
+        assertEquals("M80: the LED colour's fact after the others", "!ledcolorproto=1", dump[7])
+        assertEquals(8 + 47 + 1, dump.size)
         assertTrue(dump.all { it == "end" || '=' in it })
+        // M80, firmware 2.1.2: the strip's colour after rainspeed, read back lower case, refused in the firmware's words.
+        val rainspeed = dump.indexOfFirst { it.startsWith("rainspeed=") }
+        assertEquals(listOf("ledcolor=ffb066", "ledtint=off", "ledfade=1500", "ledambient=0"), dump.subList(rainspeed + 1, rainspeed + 5))
+        assertEquals(listOf("  ledcolor = ff8800"), console.handle("ledcolor FF8800"))
+        assertEquals(listOf("ledcolor=ff8800"), console.handle("get ledcolor"))
+        assertEquals(listOf("  usage: ledcolor RRGGBB (6 hex digits)"), console.handle("ledcolor #ff8800"))
+        assertEquals(listOf("  usage: ledtint RRGGBB|off"), console.handle("ledtint red"))
+        assertEquals(listOf("  ledfade out of range (0..5000 ms)"), console.handle("ledfade 6000"))
+        assertEquals(listOf("  ledambient out of range (0..64)"), console.handle("ledambient 65"))
+        val older = EmulatedConsole(ledColour = false).handle("dump")
+        assertEquals("2.1.1 and earlier: none of it", 7 + 43 + 1, older.size)
     }
 
     @Test

@@ -51,6 +51,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * trust is logged as not played. Its address is [ADDRESS], from the documentation range.
  * The 24 V smart plug (v1.26 — M60): with a fake plug ([EmulatedPlug], `debug.stevenpiano.plug`) the emulated piano's boards
  * follow its relay, MISSING while the supply is off; without one they always answer, as before.
+ * The strip's colour (M80, firmware 2.1.2): the emulated piano takes `ledcolor`, `ledtint`, `ledfade` and `ledambient` and
+ * says `!ledcolorproto=1`; each of those lines is logged again with what the strip would show ("LED strip: ledtint 3a7bd5
+ * over ledcolor ffb066, fading over 1500 ms, …", `adb logcat -s PianoLink`). `adb shell setprop debug.stevenpiano.ledcolor
+ * none` makes the next connection a piano without them (2.1.1 and earlier).
  */
 class EmulatedPianoLink(
     private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty,
@@ -81,6 +85,7 @@ class EmulatedPianoLink(
             Log.d(TAG, "console > $text")
             if (mode == ConsoleMode.Mute) return
             val answer = synchronized(emulated) { emulated.handle(text) }
+            if (text.substringBefore(' ') in LED_COLOUR_KEYS) Log.i(TAG, "LED strip: " + synchronized(emulated) { emulated.stripColour() })
             main.postDelayed({
                 if (console === this) {
                     answer.forEach { line ->
@@ -127,6 +132,7 @@ class EmulatedPianoLink(
 
     private val found = Runnable {
         mode = consoleMode()
+        synchronized(emulated) { emulated.ledColour = SystemProperty.read(LED_COLOUR_PROPERTY).trim() != NO_LED_COLOUR }
         console = if (mode == ConsoleMode.None) null else channel
         val fake = fakeOta()
         scenario = fake
@@ -254,6 +260,11 @@ class EmulatedPianoLink(
         /** `debug.stevenpiano.lock`: the emulated piano's lock, `open` (or unset), `claimed`, `pairing`, or `none` (2.0.x). */
         private const val LOCK_PROPERTY = "debug.stevenpiano.lock"
         private const val NO_LOCK = "none"
+
+        /** `debug.stevenpiano.ledcolor none`: a piano without the strip's colour (M80); unset, the 2.1.2 piano. */
+        private const val LED_COLOUR_PROPERTY = "debug.stevenpiano.ledcolor"
+        private const val NO_LED_COLOUR = "none"
+        private val LED_COLOUR_KEYS = setOf("ledcolor", "ledtint", "ledfade", "ledambient")
         private const val UNSET = "(unset)"
 
         /** The emulated piano's Bluetooth address, from the range RFC 7042 keeps for documentation. */

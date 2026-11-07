@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import dev.stevenjin.stevenpiano.diag.PianoDiag
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.piano.LockPhase
+import dev.stevenjin.stevenpiano.ui.LightsCopy
 import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
 import dev.stevenjin.stevenpiano.ui.SystemCopy
@@ -45,6 +46,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.stevenjin.stevenpiano.piano.LedColour
+import dev.stevenjin.stevenpiano.piano.LedColourSource
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoPage
@@ -93,6 +96,9 @@ interface PianoSettingsActions {
     fun setPianoValue(name: String, value: String)
 
     fun applyPreset(command: String)
+
+    /** M80: where the strip's colour comes from, the tablet's own choice (Lights and screen › Colour). */
+    fun setLedColourSource(source: LedColourSource)
 
     fun runPianoAction(action: PianoAction, key: Int)
 
@@ -200,19 +206,34 @@ private fun PianoSettingsSection(
     val error = ready?.lastError
     val place = error?.let { placeOf(ready.errorAbout) }
     val writable = ready?.lock?.writable == true   // v1.25 — M58: the piano's lock lets this tablet change it
+    // M80: the strip's colour, on a piano that says `!ledcolorproto=1`; its rows and the palette follow the tablet's choice.
+    val chosen = LocalContext.current.graph.settings.collectAsStateWithLifecycle().value.ledColourSource
+    val reduced = rememberReducedMotion()
     for (row in PianoSettings.rows(section)) {
-        Anchored(SettingsIndex.anchorOf(row)) {
-            when (row) {
-                is PianoRow.Control -> SettingRow(row.setting, ready, actions)
-                is PianoRow.Reading -> PianoFact(row.fact.name, row.fact.label, ready)
-                PianoRow.Presets -> PresetsRow(writable, actions)
-                PianoRow.StrikeTest -> StrikeTestRow(writable, actions)
-                PianoRow.TestLed -> TestLedRow(writable, actions)
-                PianoRow.KeyForceNote -> NoteLine(KEY_FORCE_NOTE, Modifier.padding(top = 4.dp))
-                PianoRow.ReadStatus -> ReadStatusRow(ready, statusText, statusReading, actions)
-                PianoRow.SaveNow -> SaveNowRow(ready, actions)
+        val shown = LedColour.shows(row, ready, chosen)
+        ColourReveal(shown, LedColour.dependsOnColour(row), reduced) {
+            Anchored(SettingsIndex.anchorOf(row)) {
+                when (row) {
+                    is PianoRow.Control -> SettingRow(row.setting, ready, actions)
+                    is PianoRow.Reading -> PianoFact(row.fact.name, row.fact.label, ready)
+                    PianoRow.Presets -> PresetsRow(writable, actions)
+                    PianoRow.StrikeTest -> StrikeTestRow(writable, actions)
+                    PianoRow.TestLed -> TestLedRow(writable, actions)
+                    PianoRow.KeyForceNote -> NoteLine(KEY_FORCE_NOTE, Modifier.padding(top = 4.dp))
+                    PianoRow.ReadStatus -> ReadStatusRow(ready, statusText, statusReading, actions)
+                    PianoRow.SaveNow -> SaveNowRow(ready, actions)
+                    // Shown only once the piano has answered with `!ledcolorproto=1` ([LedColour.shows]).
+                    PianoRow.ColourSource -> ready?.let { ColourSourceRow(it, chosen, actions) }
+                    PianoRow.CustomColour -> ready?.let { CustomColourRow(it, chosen, actions) }
+                    PianoRow.BackgroundGlow -> ready?.let {
+                        LevelRow(LightsCopy.BACKGROUND_GLOW, LedColour.GLOW, LedColour.AMBIENT, SettingNotes.BACKGROUND_GLOW, it, actions)
+                    }
+                    PianoRow.ColourChange -> ready?.let {
+                        LevelRow(LightsCopy.COLOUR_CHANGE, LedColour.FADES, LedColour.FADE, SettingNotes.COLOUR_CHANGE, it, actions)
+                    }
+                }
+                if (error != null && place == placeKey(row)) ErrorBanner(error, actions::dismissPianoError)
             }
-            if (error != null && place == placeKey(row)) ErrorBanner(error, actions::dismissPianoError)
         }
     }
 }
@@ -228,6 +249,7 @@ private const val KEY_FORCE_NOTE = "Key force is set at the piano's USB console.
 private fun placeOf(about: String?): String = when {
     about == null -> READ_STATUS
     PianoSettings.named(about) != null -> about
+    about in LedColour.names -> about   // M80: under the colour's own row (the tint's under Colour)
     about == PianoAction.LedTest.command -> about
     about == PianoAction.TestMin.command || about == PianoAction.TestMax.command -> STRIKE_TEST
     PianoSettings.presets.any { it.command == about } -> PRESETS
@@ -243,6 +265,10 @@ private fun placeKey(row: PianoRow): String? = when (row) {
     PianoRow.TestLed -> PianoAction.LedTest.command
     PianoRow.ReadStatus -> READ_STATUS
     PianoRow.SaveNow -> SAVE
+    PianoRow.ColourSource -> LedColour.TINT
+    PianoRow.CustomColour -> LedColour.COLOR
+    PianoRow.BackgroundGlow -> LedColour.AMBIENT
+    PianoRow.ColourChange -> LedColour.FADE
     is PianoRow.Reading, PianoRow.KeyForceNote -> null
 }
 
