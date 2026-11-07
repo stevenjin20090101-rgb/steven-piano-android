@@ -271,7 +271,7 @@ on the tablet*). Made by Steven Jin. Version 1.44.
   or none, shows the custom colour. These are the tablet's alone, not the web panel's.
   Under **Strip set-up** its length, offset, scale, and **Colour change** (Instant to 3 s): how
   long the strip fades to a new colour; also
-  glow, fade and a *Test LED* that lights one key's LED to line the strip up; then
+  the note glow, fade speed and a *Test LED* that lights one key's LED to line the strip up; then
   the piano's own screen. **Pedal**: on, half-pedalling, up and down positions.
   **Firmware and status**: the piano's firmware version, the power boards, I²C
   errors, uptime and the piano's own status report (*Read status*). Most rows
