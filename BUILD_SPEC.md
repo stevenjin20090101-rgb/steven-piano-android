@@ -228,3 +228,10 @@ of 7 boards` and `TrunkFault(answered=0, total=7, cut=true)` with the 24 V off.
 ## The release: 1.44 (versionCode 55)
 
 Uses less of the shared cloud allowance, and waits properly before trying again when the cloud is down. The library's download notification no longer clashes with Studio's. Tidying inside the app, with nothing else changed for you.
+
+# v1.45 — the cool-down: 10 minutes, Skip on the card
+
+`RailKeeper.COOL_MS` is 10 minutes (Steven; 25 since v1.40); `PowerCopy.SKIP_COOL_TEXT` reads the minutes from it. The
+safety card's `Cooling` (Play refused while cooling) has **Skip the cool-down**: `SafetyRunner.holdCooling()` calls off the
+card's 8-second moment, then the kiosk gate, then the confirm; Skip is `graph.skipCooling()` (as Piano › Power plug's), and
+any answer closes the card (`dismiss`). The check due stays due, and runs at the next Play.

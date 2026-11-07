@@ -1826,8 +1826,8 @@ class RailKeeper(
         /** v1.39 — M76: the grace between pieces outside the On hours. */
         const val GRACE_MS = 2 * 60_000L
 
-        /** v1.40 — M78 (Steven): the cool-down after a fault CUT; and the quick check's power look, this long at most. */
-        const val COOL_MS = 25 * 60_000L
+        /** v1.40 — M78 (Steven): the cool-down after a fault CUT (10 minutes from v1.45, Steven again: it was 25); and the quick check's power look, this long at most. */
+        const val COOL_MS = 10 * 60_000L
         const val QUICK_LOOK_MS = 4_000L
 
         /** How long [repower]'s own want keeps the rail up after it: the safety check's sweep is about 39 s. */

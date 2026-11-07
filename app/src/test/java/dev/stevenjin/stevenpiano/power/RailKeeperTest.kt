@@ -1389,7 +1389,7 @@ class RailKeeperTest {
     // ---- v1.40 — M78: the cool-down after a fault CUT ----------------------------------------------------------------------
 
     @Test
-    fun `a fault CUT - 25 minutes of cool-down, kept - Play, Turn on, the On hours and the rest ARM nothing, an on advert is CUT, then a want ARMs again (v1_40 M78)`() = runTest {
+    fun `a fault CUT - the cool-down (10 minutes from v1_45), kept - Play, Turn on, the On hours and the rest ARM nothing, an on advert is CUT, then a want ARMs again (v1_40 M78)`() = runTest {
         val bench = Bench(this)
         val watch = bench.Watch().apply { struck = false }
         val store = MemoryCool()
@@ -1404,8 +1404,8 @@ class RailKeeperTest {
         assertEquals(1, watch.due)
         val until = keeper.coolUntil.value!!
         assertEquals("kept", until, store.until)
-        assertTrue("25 min from the CUT", until - fault in RailKeeper.COOL_MS..RailKeeper.COOL_MS + 3_000)
-        assertTrue(bench.logs.any { "cooling down 25 min after the fault" in it })
+        assertTrue("10 min from the CUT", until - fault in RailKeeper.COOL_MS..RailKeeper.COOL_MS + 3_000)
+        assertTrue(bench.logs.any { "cooling down 10 min after the fault" in it })
 
         // Everything that may switch the plug on is refused: no ARM.
         keeper.dismissMessage()
@@ -1418,7 +1418,7 @@ class RailKeeperTest {
         keeper.keyPressed()
         keeper.wanted("safety", true)   // the safety check
         keeper.wantFor(RailKeeper.UPDATE_WAKE, 60_000)   // the firmware update waking the piano
-        advanceTimeBy(10 * 60_000L)
+        advanceTimeBy(4 * 60_000L)
         assertTrue("no ARM while cooling", bench.arms(from = cooling).isEmpty())
         assertNull("Turn the piano on refused", keeper.manualUntil.value)
         assertEquals(RailPhase.Off, keeper.phase.value)
@@ -1430,7 +1430,7 @@ class RailKeeperTest {
         keeper.advert(true)
         advanceTimeBy(1_000)
         assertEquals(listOf("CUT"), bench.kinds(from = on))
-        assertTrue("24 min to go", keeper.coolLeft()!! > 13 * 60_000L)
+        assertTrue("about 6 min to go", keeper.coolLeft()!! > 5 * 60_000L)
 
         // Over: nothing comes up by itself (the wants were refused, not kept); the next want ARMs.
         advanceTimeBy(until - currentTime + 1_000)

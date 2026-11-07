@@ -345,6 +345,11 @@ class SafetyRunner(
     /** v1.40 — M78: the cool-down's ms left, for the card's words (Run the safety check refused while cooling). */
     fun coolLeft(): Long? = cooling()
 
+    /** v1.45: the cooling card's Skip was pressed: it stays up (its moment's end called off) while the PIN and the confirm are asked. */
+    fun holdCooling() {
+        coolJob?.cancel()
+    }
+
     private fun onPlayed(piece: Played) {
         if (!host.pianoReady()) return   // the piano didn't play it (no piano, a MIDI piano, guest play): not counted
         if (!every()) return   // v1.39 — M76: the check every 6 pieces switched off: nothing counted

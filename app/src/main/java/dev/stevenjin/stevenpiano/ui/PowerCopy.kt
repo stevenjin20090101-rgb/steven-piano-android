@@ -16,6 +16,7 @@ import dev.stevenjin.stevenpiano.power.PairStep
 import dev.stevenjin.stevenpiano.power.Peak
 import dev.stevenjin.stevenpiano.power.PlugAdvert
 import dev.stevenjin.stevenpiano.power.PlugSettings
+import dev.stevenjin.stevenpiano.power.RailKeeper
 import dev.stevenjin.stevenpiano.power.RailMessage
 import dev.stevenjin.stevenpiano.power.RailPhase
 import dev.stevenjin.stevenpiano.power.SwitchBot
@@ -85,7 +86,7 @@ object PowerCopy {
 
     const val SKIP_COOL = "Skip the cool-down"
     const val SKIP_COOL_NOTE = "Only if you know the piano is safe. The safety check still plays every key before the next piece."
-    const val SKIP_COOL_TEXT = "The coils may still be hot. Skip the 25-minute cool-down?"
+    val SKIP_COOL_TEXT = "The coils may still be hot. Skip the ${RailKeeper.COOL_MS / 60_000L}-minute cool-down?"
     const val SKIP_COOL_ACTION = "Skip"
 
     /** v1.39 — M76: the plug's adverts silent for over 10 s with the rail up (amber, small; never a CUT by itself). */

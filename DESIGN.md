@@ -363,3 +363,12 @@ plain cover (M73), a House & Dance piece shows it. A cover over 1 MB, missing fr
 it never fails the import. A folder's or files picked one by one bring no covers. The piece sheet's credit reads
 "Cover: 25 · Adele" (or "Cover: from the song zip" with none). **The words**: the import bar adds "1,966 covers
 added."; the web panel's tally "1,966 covers added".
+
+# v1.45 — the cool-down: 10 minutes, and Skip on the card that refuses Play
+
+Steven (2026-11-07, multiple choice): "Shorter, plus Skip". The cool-down after a fault CUT is **10 minutes** (25 since
+v1.40). The **Cooling down** card that refuses Play gains **Skip the cool-down**, a text button before OK (the safe answer stays
+the last and plainest): the kiosk PIN while the kiosk keeps the settings locked, then Piano › Power plug's own confirm ("The
+coils may still be hot. Skip the 10-minute cool-down?", Skip and Cancel). The card stays up while they're asked, and closes
+once answered; skipped, the next Play runs the safety check the fault called for, every key, as before. The tablet only:
+the panel never skips a cool-down, as nobody there can see the piano.

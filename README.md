@@ -1209,10 +1209,11 @@ piano). A real failure is a whole power board: one that loses I²C latches its 1
 Each trip makes the safety check run before the next piece.
 
 **The cool-down** (1.40): after a fault cut (any **24 V cut: …**, a rail-up trip, or a key found on by the safety check)
-nothing switches the plug on for 25 minutes (Play, Keys, Turn the piano on, the On hours, the web panel, the safety
+nothing switches the plug on for 10 minutes (25 before 1.45; Play, Keys, Turn the piano on, the On hours, the web panel, the safety
 check, a firmware update), and the tablet switches it off if it comes on; Play, Piano › Power plug, System and the web
 panel say "Cooling down after a fault · 24 min left", then "Run the safety check to play again". **Skip the cool-down**
-(Piano › Power plug, only while cooling) asks "The coils may still be hot. Skip the 25-minute cool-down?" and is logged;
+(Piano › Power plug, and from 1.45 the Cooling down card that refuses Play; the kiosk PIN while the kiosk is locked) asks
+"The coils may still be hot. Skip the 10-minute cool-down?" and is logged;
 the safety check, playing every key, still runs before the next piece.
 
 **On hours** (1.39, Piano › Power plug › On hours; on by default, 7:00–22:00 every day, with From and To): within them the
@@ -1391,7 +1392,7 @@ time, and a change of the clock or the time zone is taken at once. (Since 1.24 n
 From 1.40 the keys are played (step 4) only in a check a power fault called for (a trip of the power plug's watch, or a
 key found still on); every other check, by hand or after the 6th piece, is quick and silent (the keys released, the
 coils, the boards, the piano's I²C count and what the 24 V draws idle), and System says "quick check, no keys struck".
-After a fault the check waits for the 25-minute cool-down (see *The 24 V power plug*), and the tablet says "Run the
+After a fault the check waits for the 10-minute cool-down (see *The 24 V power plug*), and the tablet says "Run the
 safety check to play again" until it passes.
 
 After every 6th piece the tablet plays on the piano, the piano checks itself (from 1.26). A full-screen **Safety

@@ -695,6 +695,13 @@ class SafetyRunnerTest {
         assertTrue(rig.runner.state.value.card)
         assertEquals("Cooling down after a fault · 25 min left", rig.runner.refusal())
         assertEquals(Deferral.COOLING, rig.runner.runNow())
+        // v1.45: Skip pressed on the card: it stays up past its moment while the PIN and the confirm are asked.
+        rig.runner.holdCooling()
+        advanceTimeBy(SafetyRunner.UNFINISHED_SHOWN_MS + 1_000)
+        assertTrue("held", rig.runner.state.value.card)
+        rig.runner.dismiss()
+        assertFalse("closed by its Skip, Cancel or OK", rig.runner.state.value.card)
+        assertFalse(rig.runner.admit(3L) { played++ })   // refused again: the card again
         rig.coolLeft = 24 * 60_000L - 1
         assertEquals("Cooling down after a fault · 24 min left", rig.runner.refusal())
         runCurrent()

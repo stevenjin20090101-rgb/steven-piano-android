@@ -88,6 +88,7 @@ import dev.stevenjin.stevenpiano.safety.StepLine
 import dev.stevenjin.stevenpiano.safety.Why
 import dev.stevenjin.stevenpiano.ui.KioskGate
 import dev.stevenjin.stevenpiano.ui.KioskGateSheet
+import dev.stevenjin.stevenpiano.ui.PowerCopy
 import dev.stevenjin.stevenpiano.ui.SafetyCopy
 import dev.stevenjin.stevenpiano.ui.rememberKioskGate
 import dev.stevenjin.stevenpiano.ui.screens.piano.pages.KeyMap
@@ -168,7 +169,7 @@ fun BoxScope.SafetyCheckCard() {
                                     },
                                     onAside = runner::putAside,
                                 )
-                                cooling != null && !state.running && state.ended == null -> Cooling(cooling, onDismiss = runner::dismiss)
+                                cooling != null && !state.running && state.ended == null -> Cooling(cooling, gate, onDismiss = runner::dismiss)
                                 else -> Checking(state, onDismiss = runner::dismiss)
                             }
                         }
@@ -189,9 +190,15 @@ fun BoxScope.SafetyCheckCard() {
     KioskGateSheet(gate)
 }
 
-/** v1.40 — M78: Play refused while the rail cools down after a fault: the minutes left, what follows, and OK. */
+/**
+ * v1.40 — M78: Play refused while the rail cools down after a fault: the minutes left, what follows, and OK. v1.45 (Steven):
+ * and **Skip the cool-down**, as Piano › Power plug has it: the kiosk PIN while the kiosk keeps the settings locked, then the
+ * same confirm. Skipped, the card closes, and the next Play runs the safety check the fault called for, every key.
+ */
 @Composable
-private fun Cooling(left: Long, onDismiss: () -> Unit) {
+private fun Cooling(left: Long, gate: KioskGate, onDismiss: () -> Unit) {
+    val graph = LocalContext.current.graph
+    var skipping by remember { mutableStateOf(false) }
     Text(
         SafetyCopy.cooling(left),
         Modifier.semantics {
@@ -202,8 +209,38 @@ private fun Cooling(left: Long, onDismiss: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurface,
     )
     Text(SafetyCopy.COOLING_NOTE, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+        TextButton(
+            onClick = {
+                graph.safety.holdCooling()
+                gate.run { skipping = true }
+            },
+            modifier = Modifier.heightIn(min = TOUCH),
+        ) { Text(PowerCopy.SKIP_COOL) }
         TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = TOUCH)) { Text(SafetyCopy.OK) }
+    }
+    if (skipping) {
+        GlassAlertDialog(
+            onDismissRequest = {
+                skipping = false
+                onDismiss()
+            },
+            title = { Text(PowerCopy.SKIP_COOL) },
+            text = { Text(PowerCopy.SKIP_COOL_TEXT) },
+            confirmButton = {
+                TextButton(onClick = {
+                    skipping = false
+                    graph.skipCooling()
+                    onDismiss()
+                }) { Text(PowerCopy.SKIP_COOL_ACTION) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    skipping = false
+                    onDismiss()
+                }) { Text("Cancel") }
+            },
+        )
     }
 }
 
