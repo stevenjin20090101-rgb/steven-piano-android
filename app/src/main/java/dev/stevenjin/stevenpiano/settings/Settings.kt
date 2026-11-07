@@ -26,6 +26,7 @@ import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
 import dev.stevenjin.stevenpiano.midi.KeyMap
+import dev.stevenjin.stevenpiano.piano.LedColourSource
 import dev.stevenjin.stevenpiano.player.DynamicRange
 import dev.stevenjin.stevenpiano.player.ExpressionLevel
 import dev.stevenjin.stevenpiano.player.Performance
@@ -232,6 +233,12 @@ data class PianoSettings(
      * 1.39, so every install reads it off until switched on.
      */
     val safetyCheckEvery: Boolean = false,
+    /**
+     * M80: where the piano's LED strip takes its colour (Piano › Lights and screen › Colour, shown only on a piano that
+     * says `!ledcolorproto=1`): the album art, the custom colour, or the piano's palettes. Palette by default, which is the
+     * strip as it was before M80; the tablet's own choice, never stored on the piano.
+     */
+    val ledColourSource: LedColourSource = LedColourSource.PALETTE,
 ) {
     /** Channel [key]'s volume: the person's, else 70 %. */
     fun channelVolume(key: String): Int = channelVolumes[key] ?: DEFAULT_CHANNEL_VOLUME
@@ -521,6 +528,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** v1.39 — M76: Safety check every 6 pieces. */
     suspend fun setSafetyCheckEvery(on: Boolean) = edit { it[SAFETY_CHECK_EVERY] = on }
 
+    /** M80: where the LED strip's colour comes from. */
+    suspend fun setLedColourSource(source: LedColourSource) = edit { it[LED_COLOUR_SOURCE] = source.name }
+
     /** Channel [key]'s volume, 0-100 %, kept with the others as one small JSON object. */
     suspend fun setChannelVolume(key: String, pct: Int) = edit {
         it[CHANNEL_VOLUMES] = ChannelVolumesJson.write(ChannelVolumesJson.read(it[CHANNEL_VOLUMES]) + (key to pct.coerceIn(0, 100)))
@@ -618,6 +628,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             listenFromPanel = this[LISTEN_FROM_PANEL] ?: defaults.listenFromPanel,
             safetyCheckListens = this[SAFETY_CHECK_LISTENS] ?: defaults.safetyCheckListens,
             safetyCheckEvery = this[SAFETY_CHECK_EVERY] ?: defaults.safetyCheckEvery,
+            ledColourSource = LedColourSource.entries.firstOrNull { it.name == this[LED_COLOUR_SOURCE] } ?: defaults.ledColourSource,
         )
     }
 
@@ -703,6 +714,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
         /** v1.39 — M76: the safety check every 6 pieces; absent (every install before 1.39), off. */
         val SAFETY_CHECK_EVERY = booleanPreferencesKey("safetyCheckEvery6")
+        val LED_COLOUR_SOURCE = stringPreferencesKey("ledColourSource")   // M80
 
         /** A device's identity and name as kept (v1.11 — M29): what the app writes is far shorter. */
         const val MAX_DEVICE_ID = 256

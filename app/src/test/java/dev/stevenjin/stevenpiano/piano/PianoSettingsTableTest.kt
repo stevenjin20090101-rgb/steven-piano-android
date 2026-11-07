@@ -78,8 +78,9 @@ class PianoSettingsTableTest {
 
     @Test
     fun `the one tunable the table leaves out is the piano screen's key display`() {
+        // M80: the strip's colour (firmware 2.1.2) has its own rows, outside the table, so the panel never offers it.
         val tunables = spec.keys.filterNot { it.startsWith("!") }
-        assertEquals(listOf("keyviz"), tunables - PianoSettings.all.map { it.name }.toSet())
+        assertEquals(listOf("keyviz"), tunables - PianoSettings.all.map { it.name }.toSet() - LedColour.names)
     }
 
     @Test

@@ -477,5 +477,6 @@ object SystemCopy {
         "temp", "heap", "heapmin", "heapblock", "heapsize", "tasks", "stack", "looprate", "loopms", "rssi", "active", "trips", "crashes",
         "i2cfails", "uptime", "repeatms", "reset", "ota", "fw", "boards", "pedalboard", "proto", "ble",
         "lockproto", "lock", "auth", "nonce", "guest", "claim",
+        "ledcolorproto",   // M80: the LED colour's marker, which the Lights page answers by showing its rows
     )
 }

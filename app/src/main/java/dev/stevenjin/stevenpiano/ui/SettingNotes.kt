@@ -64,6 +64,15 @@ object SettingNotes {
     const val SAVE_TO_PIANO = "Keeps these settings after the piano restarts"
     const val ALL_KEYS_OFF = "Lets go of every key and the pedal at once"
 
+    // ---- Lights and screen: the strip's colour (M80, a piano with `!ledcolorproto=1`) ---------------
+
+    const val LED_COLOUR_ALBUM_ART = "The colour of the playing piece's cover"
+    const val LED_COLOUR_CUSTOM = "One colour, picked below"
+    const val LED_COLOUR_PALETTE = "The piano's own palettes, picked below"
+    const val CUSTOM_COLOUR_FALLBACK = "Shown when a piece has no cover, or a grey one"
+    const val BACKGROUND_GLOW = "A dim wash of the colour under the lit notes"
+    const val COLOUR_CHANGE = "How long the strip takes to fade to a new colour"
+
     // ---- INSTRUMENTS -------------------------------------------------------------------------------
 
     const val AUTO_CONNECT = "Connects to the piano when the app opens"

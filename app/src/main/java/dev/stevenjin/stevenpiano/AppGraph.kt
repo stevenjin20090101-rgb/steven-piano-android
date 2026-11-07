@@ -74,6 +74,7 @@ import dev.stevenjin.stevenpiano.instruments.MidiKeyboard
 import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
+import dev.stevenjin.stevenpiano.piano.LedColourKeeper
 import dev.stevenjin.stevenpiano.piano.LockKeys
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
@@ -428,6 +429,22 @@ class AppGraph(private val app: Application) {
         )
     }
 
+    /**
+     * M80: the strip's colour as Piano › Lights and screen chose it (the album art's, the custom colour, the palettes), on a
+     * piano that says `!ledcolorproto=1`: the tint at each piece and connection. It follows the piano, the choice and the
+     * loaded piece, and runs nothing on a clock.
+     */
+    val ledColours: LedColourKeeper by lazy {
+        LedColourKeeper(
+            pianoSettings,
+            source = settingsRepository.settings.map { it.ledColourSource },
+            piece = player.state.map { it.piece?.pieceId },
+            coverOf = artwork::ledCover,
+            follow = { source -> appScope.launch { settingsRepository.setLedColourSource(source) } },
+            scope = appScope,
+        )
+    }
+
     /** The channels, in their order on screen (Calm, Epic, Baroque…), read from the app's assets the first time, off the main thread. */
     val channels: List<Channel> by lazy { Channels.load(app, builtIns.lists) }
 
@@ -585,6 +602,7 @@ class AppGraph(private val app: Application) {
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         appScope.launch { library.genresChanged.debounce(GENRES_SETTLE_MS).collect { refreshGenrePlaylists() } }   // v1.37 — M73
         pianoSettings.start()
+        ledColours.start()   // M80
         appScope.launch {
             try {
                 settingsRepository.forgetShuffle()   // v1.26 — M61: shuffle is gone; its stored value goes once

@@ -23,18 +23,22 @@ import dev.stevenjin.stevenpiano.data.db.ArtworkStatus
 import dev.stevenjin.stevenpiano.net.AppleCatalogApi
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.net.WikiApi
+import dev.stevenjin.stevenpiano.piano.CoverTint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -260,21 +264,45 @@ class ArtworkRepository(
      * (128 px), read off the main thread once a picture and kept by its path and version (a replaced picture is read
      * again); null when it has none, when it is grey, or when it can't be read (asked again next time).
      */
-    suspend fun palette(artwork: ArtworkEntity): ArtPalette? {
+    suspend fun palette(artwork: ArtworkEntity): ArtPalette? = colours(artwork)?.palette
+
+    /**
+     * The LED strip's colour of [artwork]'s picture (M80, [artLedColour], 0xRRGGBB), read with its [palette] and kept with
+     * it; null when it has none, when it is grey, or when it can't be read.
+     */
+    suspend fun ledColour(artwork: ArtworkEntity): Int? = colours(artwork)?.led
+
+    /**
+     * Piece [pieceId]'s cover colour for the LED strip (M80), now and whenever its cover changes: the colour of its own
+     * cover, when the covers' rule lets its cover show ([CoverRule.layers]: a song of Steven's K-pop has none unless one
+     * was chosen by hand), else none. A composer's portrait is never album art.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun ledCover(pieceId: Long): Flow<CoverTint> =
+        combine(artwork(ArtworkEntity.forPiece(pieceId)), artwork(ArtworkEntity.forCover(pieceId)), coverStyles) { own, lookup, styles ->
+            val style = styles.of(pieceId)
+            val chosen = style == CoverStyle.Plain && ArtworkPolicy.chosenByHand(lookup)
+            own?.takeIf { it.imagePath != null && ArtLayer.OwnCover in CoverRule.layers(style, chosen, styles.read) }
+        }
+            .distinctUntilChanged { a, b -> a?.imagePath == b?.imagePath && a?.fetchedAt == b?.fetchedAt }
+            .mapLatest { row -> CoverTint(row?.let { ledColour(it) }) }
+
+    private suspend fun colours(artwork: ArtworkEntity): KnownPalette? {
         val key = paletteKey(artwork) ?: return null
-        palettes.get(key)?.let { return it.palette }
+        palettes.get(key)?.let { return it }
         val bitmap = bitmap(artwork, ArtSize.Row) ?: return null
         val read = withContext(Dispatchers.Default) {
             try {
                 val pixels = IntArray(bitmap.width * bitmap.height)
                 bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                KnownPalette(artPalette(pixels, bitmap.width, bitmap.height))
+                val (palette, led) = artColours(pixels, bitmap.width, bitmap.height)
+                KnownPalette(palette, led)
             } catch (e: RuntimeException) {   // a picture that can't be read (recycled, not in memory): no backdrop
                 null
             }
         } ?: return null
         palettes.put(key, read)
-        return read.palette
+        return read
     }
 
     /** [palette], only if it was read already: the first frame has its colours. Cheap: safe on the main thread. */
@@ -283,8 +311,8 @@ class ArtworkRepository(
     /** A picture's path and version (`imagePath@fetchedAt`, as [BitmapCache] keys its decodes); null when there is none. */
     private fun paletteKey(artwork: ArtworkEntity): String? = artwork.imagePath?.let { "$it@${artwork.fetchedAt}" }
 
-    /** A picture's palette as read: none for grey art. */
-    private class KnownPalette(val palette: ArtPalette?)
+    /** A picture's palette and LED colour as read (M80): none for grey art. */
+    private class KnownPalette(val palette: ArtPalette?, val led: Int?)
 
     /**
      * The photo at [uri] (from the photo picker, whose grant does not last) becomes the playlist's

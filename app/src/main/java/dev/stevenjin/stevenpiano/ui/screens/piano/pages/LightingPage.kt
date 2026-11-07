@@ -20,7 +20,9 @@ import dev.stevenjin.stevenpiano.ui.screens.piano.PianoSettingsActions
  * (on or off, mode, brightness, reactive palette) · the Strip set-up disclosure, closed at first: LAYOUT
  * (length, offset, scale, the unlit end, direction, glow, Test LED) · MOTION (brightness following
  * velocity, fade and rainbow speeds) · THE PIANO'S SCREEN (when it dims, and how far). The hub's row reads
- * "Off" or "Reactive · 62%".
+ * "Off" or "Reactive · 62%". M80, on a piano that says `!ledcolorproto=1`: STRIP adds Colour (Album art, Custom, or
+ * Palette in Reactive, which alone shows the palettes), the custom colour, and in Reactive the background glow; MOTION
+ * adds the colour change ([dev.stevenjin.stevenpiano.piano.LedColour.shows]).
  */
 @Composable
 fun LightingPage(report: PianoReport, actions: PianoSettingsActions) = PianoPageContent(PianoPage.Lighting, report, actions)

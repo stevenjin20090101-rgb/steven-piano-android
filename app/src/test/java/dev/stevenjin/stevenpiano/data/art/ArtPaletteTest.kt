@@ -9,6 +9,7 @@
 
 package dev.stevenjin.stevenpiano.data.art
 
+import dev.stevenjin.stevenpiano.piano.LedColour
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -92,6 +93,37 @@ class ArtPaletteTest {
         assertEquals(first, artPalette(pixels.copyOf(), 128, 128))
         assertEquals("shuffled", first, artPalette(pixels.toList().shuffled(Random(7)).toIntArray(), 128, 128))
         assertEquals(4, notNull(first).hues.size)
+    }
+
+    private fun led(pixels: IntArray): Int? = artLedColour(pixels, pixels.size, 1)
+
+    @Test
+    fun `the strip takes the most vivid colour covering a fair share, never a speck (M80)`() {
+        val mutedBlue = rgb(70, 90, 130)
+        val vividRed = rgb(220, 30, 30)
+        val greenSpeck = rgb(30, 230, 30)
+        val colour = notNull(led(picture(mutedBlue to 600, vividRed to 250, greenSpeck to 20, rgb(0, 0, 0) to 130)))
+        val hsv = LedColour.hsv(colour)
+        assertTrue("red, not the larger muted blue nor the vivid green speck: ${hsv.hue}", hsv.hue < 2f || hsv.hue > 358f)
+        assertEquals("at full value", 1f, hsv.value, 0.001f)
+        assertEquals("its own saturation, above the floor", 190f / 220f, hsv.saturation, 0.01f)
+        assertEquals("the same answer whatever the order", colour, led(picture(vividRed to 250, rgb(0, 0, 0) to 130, greenSpeck to 20, mutedBlue to 600)))
+    }
+
+    @Test
+    fun `a pale cover's colour is raised to the strip's saturation and full value (M80)`() {
+        val pale = notNull(led(picture(rgb(150, 170, 200) to 1_000)))
+        val hsv = LedColour.hsv(pale)
+        assertEquals(ArtLedRules.MIN_SATURATION, hsv.saturation, 0.01f)
+        assertEquals(1f, hsv.value, 0.001f)
+        assertEquals("its hue kept", 216f, hsv.hue, 2f)
+    }
+
+    @Test
+    fun `a grey cover, or none, gives the strip no colour, so the custom colour shows (M80)`() {
+        assertNull(led(picture(rgb(128, 128, 128) to 900, rgb(30, 30, 30) to 100)))
+        assertNull("a grey page with a speck of colour", led(picture(rgb(120, 120, 120) to 980, rgb(220, 30, 30) to 20)))
+        assertNull(led(IntArray(0)))
     }
 
     private fun <T : Any> notNull(value: T?): T {
