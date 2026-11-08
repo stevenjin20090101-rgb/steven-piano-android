@@ -390,3 +390,14 @@ never kept), `ledfade` and `ledambient`; nothing new shows until a piano says `!
   them; the swatches have no glass, and the page's own chrome stays monochrome.
 - A palette chosen elsewhere (the web panel, the piano's screen) moves the tablet's Colour to Palette rather than forcing
   Solid back. The web panel shows none of this.
+
+# v1.46 — M81: the 24 V between pieces, the faster key check, the strip at rest
+
+Steven (2026-11-08, multiple choice): "Day, fixed after faults", "About 25 s", "Smooth fade".
+
+- **The 24 V between pieces.** Within the On hours it stays on between pieces, as since 1.39, and now also after a fault:
+  through the cool-down nothing comes on, and the next piece, once its safety check passed and the piano came up with every
+  board answering, puts the hours back. Overnight nothing changes: the 24 V is off unless a person at the tablet wakes it, so a
+  tablet that froze at night can't leave the plug on unwatched (the SwitchBot has no timer of its own).
+- **The key check** strikes one key every 0.3 s, low to high, once (about 26 s; 39 s before). It still runs only in a check a
+  fault called for. Keys not heard still only warn.

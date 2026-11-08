@@ -19,7 +19,7 @@ import kotlin.math.sqrt
 
 /**
  * A piano as a tablet's microphone hears it, made up for the tests (v1.23 — M55): each key a note of six harmonics falling
- * off, heard 20 ms after it went down, held 150 ms, then damped; and the room's noise. Since v1.32 — M69 a note can also be
+ * off, heard 20 ms after it went down, held as long as the key test holds it ([KeyTest.HOLD_MS]), then damped; and the room's noise. Since v1.32 — M69 a note can also be
  * out of tune (cents off), its overtones stretched as a real string's are, and undamped (the top keys ring on).
  */
 object Tones {
@@ -27,7 +27,7 @@ object Tones {
 
     private const val LATENCY_S = 0.02
     private const val ATTACK_S = 0.005
-    private const val HOLD_S = 0.15
+    private const val HOLD_S = KeyTest.HOLD_MS / 1000.0
     private const val DAMP_S = 0.06
     private const val HARMONICS = 6
 

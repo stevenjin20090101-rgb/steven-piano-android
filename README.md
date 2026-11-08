@@ -1228,8 +1228,10 @@ piano stays on and connected all day, so Play starts at once. Outside them it is
 until 7:00 · press Play here to wake it" (the System page and the web panel too). A person at the tablet still wakes it:
 Play, Keys, Turn the piano on, Test every key, the safety check. After a piece the tablet keeps it on 2 minutes for the
 next one, then turns it off. The web panel, the relay and guests can't wake it outside the hours: "The piano is off until
-7:00" (guests' requests still join Up next). A piece already playing at 22:00 finishes, then the 24 V goes off. Quiet
-times still hold playback as before. The web panel's System page has **Turn the piano on / off** too (on refused outside
+7:00" (guests' requests still join Up next). A piece already playing at 22:00 finishes, then the 24 V goes off. After a
+fault cut within them (from 1.46), the 24 V stays off through the cool-down; the next piece, once its safety check has
+passed and the piano has come up with every board answering, puts the On hours back, so the 24 V stays on between pieces
+again (before 1.46 it went off after every piece until the next day). Quiet times still hold playback as before. The web panel's System page has **Turn the piano on / off** too (on refused outside
 the hours).
 
 **The power on Now playing** (1.39): with a plug paired, one quiet line under the transport, "12.3 W now · peak 145.0 W
@@ -1413,7 +1415,7 @@ check** card shows, over whatever was on the tablet, the resting screen too, wit
    off and on** (with the power plug), then the piano is read again. Boards **still missing** lock Play (from 1.33,
    with the microphone on or off): "Safety check failed: 6 of 7 power boards answered", and the card asks for whoever
    looks after the piano to check it.
-4. **Testing each key (37 of 84)**: the piano strikes each key once, low to high (about 40 s), while the tablet's
+4. **Testing each key (37 of 84)**: the piano strikes each key once, low to high, one every 0.3 s (about 26 s from 1.46; 39 s before), while the tablet's
    microphone listens; the banner says "Microphone on · safety check". Nothing is recorded or sent. The keys are
    struck only once the power to them is up (with the power plug, a second or so after it is wanted). If it doesn't
    come up within 10 seconds no key is judged ("Testing each key · the 24 V didn't come up"): the power goes off and

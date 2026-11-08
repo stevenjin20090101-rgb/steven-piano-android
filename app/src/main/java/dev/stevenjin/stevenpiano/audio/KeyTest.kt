@@ -40,7 +40,8 @@ data class KeyTestState(
  * high, one every [EVERY_MS], each [HOLD_MS] long at velocity [VELOCITY], through the player's own path and its safety
  * (the router's re-strike guard and reference counts, the lock during a firmware update: [Piano]); the microphone hears
  * throughout ([Ears]: the panel that started it hears it live) and [KeyCheck] says, key by key, which didn't sound. The
- * tablet's own piano sound is held silent meanwhile: it would fake a result. About 39 s.
+ * tablet's own piano sound is held silent meanwhile: it would fake a result. About 26 s (v1.46 — M81, Steven: "make the note
+ * check faster"; it was 39 s at one every 450 ms).
  *
  * Refused, with its reason: the piano not connected; a piece playing ("Stop the music first."); a quiet time not lifted;
  * a firmware update running; the microphone not allowed (for a panel's test, Listening from the panel off; the tablet's
@@ -195,9 +196,12 @@ class KeyTest(
         val KEYS: IntRange = PianoSettings.testKeys
         val TOTAL: Int = KEYS.count()
 
-        /** One strike every 450 ms, 150 ms long, at velocity 100. */
-        const val EVERY_MS = 450L
-        const val HOLD_MS = 150L
+        /**
+         * One strike every 300 ms, 100 ms long, at velocity 100 (v1.46 — M81; 450 ms and 150 ms before). The key is let go
+         * 200 ms before the next strike, so its damper has quietened it before the next key's baseline ([KeyCheck.BEFORE_MS]).
+         */
+        const val EVERY_MS = 300L
+        const val HOLD_MS = 100L
         const val VELOCITY = 100
 
         /** The room heard before the first strike, and after the last one's window for its sound to arrive. */

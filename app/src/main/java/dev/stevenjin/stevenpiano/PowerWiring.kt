@@ -400,7 +400,8 @@ internal class PowerWiring(private val graph: AppGraph, private val app: Applica
      * The On hours (Piano › Power plug): within them, with Steven Piano the instrument, the rail's standing want
      * ([RailKeeper.HOURS]); outside them none. Looked at every [HOURS_LOOK_MS] on the wall clock (no alarm: the clock in
      * the app's own process, as the quiet times), and at once when the hours or the instrument change; told to the rail
-     * only when it changes, so a fault that ended the want isn't undone until the next boundary.
+     * only when it changes, so a fault that ended the want isn't undone by itself: since v1.46 (M81) the next piece that
+     * starts with the rail up cleanly brings it back ([RailKeeper]'s renewHours), the safety check passed first after a fault.
      */
     private fun followOnHours() {
         appScope.launch {

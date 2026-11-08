@@ -256,7 +256,8 @@ sealed interface RailMessage {
  *   check due before the next Play ([PowerHost.checkDue]). The rail-up's reading is also weighed against the plug's usual
  *   idle (v1.31 — M68; [PowerHost.usualIdle]): more than T above it twice, a second apart, CUT, "The 24 V draws N W more
  *   than usual with nothing playing — 24 V cut", the check due; a rail-up that didn't trip is kept, one that did never is.
- * - **v1.39 — M76.** The On hours' standing want ([HOURS]) keeps the rail up all day; outside them a person at the tablet
+ * - **v1.39 — M76.** The On hours' standing want ([HOURS]) keeps the rail up all day (v1.46 — M81: and comes back after a
+ *   failure or a fault ended it, with the next piece's clean rail-up: [renewHours]); outside them a person at the tablet
  *   wakes it, and a piece's check that passes keeps it [graceMs] for the next ([GRACE]). While up, beside the power
  *   watch, the stuck-board watch ([BoardWatch]: a board's worth drawn that nothing explains, idle or playing) and the
  *   piano's `!i2cfails` (every 5 s during a piece, every 30 s idle) CUT at once ([cutAtOnce]); the plug's status every 5 s
@@ -465,6 +466,9 @@ class RailKeeper(
     private var noGrace = false
     private var startedInHours = false
 
+    /** v1.46 — M81: the On hours' want as last told ([wanted] with [HOURS]): within them, whatever ended its want since. */
+    private var hoursTold = false
+
     private val _coolUntil = MutableStateFlow<Long?>(null)
 
     /**
@@ -501,8 +505,28 @@ class RailKeeper(
     // ---- The inputs (main thread) ------------------------------------------------------------------------------
 
     override fun wanted(reason: String, on: Boolean) {
+        if (reason == HOURS) hoursTold = on
         if (on) put(reason) else remove(reason)
+        if (on && reason == PLAY) renewHours()   // v1.46 — M81: the rail may be up already (the check's, or the last piece's)
         playedNow()
+    }
+
+    /**
+     * v1.46 — M81 (Steven: "keep the 24 V on when the piano isn't playing"). A failure or a fault ends every want, the On
+     * hours' too, and before 1.46 it stayed ended until the next boundary: every piece after it ended with a CUT, and the
+     * next woke the piano from off. Now a piece that starts with the rail up cleanly (every board answering) brings the
+     * hours' want back while they still hold, so the rail stays up between pieces again. A piece only starts once the
+     * safety check a fault made due has passed (the gate waits for it), so after a fault this is "once the check passes".
+     * The cool-down still refuses every want until it ends; overnight, outside the hours, nothing changes.
+     */
+    private fun renewHours() {
+        if (!hoursTold) return
+        val t = now()
+        if (wants[HOURS]?.let { live(it, t) } == true) return
+        if (wants[PLAY]?.let { live(it, t) } != true) return
+        val baseline = _baseline.value ?: return
+        if (_phase.value != RailPhase.Up || needsBaseline || baseline.size < (_boards.value?.total ?: Boards.TOTAL)) return
+        if (put(HOURS)) log("Rail: a clean rail-up for a piece within the On hours: they keep the 24 V on between pieces again")
     }
 
     /** The Keys tab came on screen ([on]) or left it: while on it wants the rail, until 10 minutes pass without a key. */
@@ -1752,6 +1776,7 @@ class RailKeeper(
         }
         refreshHeld()
         if (phase != RailPhase.Waking && _message.value == RailMessage.Waking) _message.value = null
+        if (phase == RailPhase.Up) renewHours()   // v1.46 — M81: each time the rail stands up, checked
     }
 
     /**
@@ -1830,7 +1855,7 @@ class RailKeeper(
         const val COOL_MS = 10 * 60_000L
         const val QUICK_LOOK_MS = 4_000L
 
-        /** How long [repower]'s own want keeps the rail up after it: the safety check's sweep is about 39 s. */
+        /** How long [repower]'s own want keeps the rail up after it: the safety check's sweep is about 26 s (v1.46 — M81). */
         const val REPOWER_HOLD_MS = 60_000L
         const val UPDATE_CAP_MS = 3 * 60_000L
         const val KEYS_IDLE_MS = 10 * 60_000L

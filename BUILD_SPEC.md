@@ -251,3 +251,18 @@ tablet's setting (`Settings`, default Palette: today's look). The emulated piano
 ## The release: 1.45 (versionCode 56)
 
 The LED strip can follow each piece's album art, or a colour you pick on the tablet, with smooth fades and an optional background glow (needs piano firmware 2.1.2). After a power fault the cool-down is 10 minutes, and its popup can skip it with the kiosk PIN; the safety check still runs. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.
+
+# v1.46 — M81: the On hours back after a fault, and a faster key sweep
+
+**The On hours after a fault.** A failure or a fault CUT ends every want, `RailKeeper.HOURS` too, and `PowerWiring.followOnHours`
+tells the hours only when they change, so before 1.46 the rail CUT after every piece until the next boundary. The keeper now keeps
+the hours as last told (`hoursTold`); `renewHours()` puts `HOURS` back when the rail stands `Up` with a full baseline (every board
+answering, no baseline pending) while a `PLAY` want is live and the hours' own is not: from `setPhase(Up)`, and from `wanted(PLAY,
+true)` when the rail is up already (the safety check's, or the stop's second taken back). A piece is wanted only once the player's
+start passed `SafetyRunner.admit`, so after a fault the check it made due has passed first; the cool-down still refuses every
+want, the hours' too. Keys, Turn the piano on, the safety check's own want and Test every key never renew it.
+
+**The sweep.** `KeyTest.EVERY_MS` 300 (450), `HOLD_MS` 100 (150): about 26 s for the 84 keys. `KeyCheck.TO_MS` 280 (330), so a key's
+window ends before the next strike; `KeyCheck.BEFORE_MS` 60 (120), so the baseline starts 140 ms after the key before was let go,
+its damper down by then (in the bass a key shares bins with the one before). The tests' made-up piano (`Tones`) holds each key
+`KeyTest.HOLD_MS`. Not yet heard on a real piano.

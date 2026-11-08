@@ -1445,6 +1445,64 @@ class RailKeeperTest {
     }
 
     @Test
+    fun `within the On hours a fault ends their want, the cool-down holds, and the next piece's clean rail-up brings it back - the rail stays up after it (v1_46 M81)`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch().apply { struck = false }
+        val keeper = bench.keeper(watch, cool = MemoryCool())
+        keeper.wanted(RailKeeper.HOURS, true)
+        advanceTimeBy(10_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        bench.extraWatts = 144.0   // a board left on at idle: a fault CUT, every want ended, the On hours' too
+        advanceTimeBy(3_000)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        bench.extraWatts = 0.0
+        keeper.dismissMessage()
+        advanceTimeBy(RailKeeper.COOL_MS + 60_000L)
+        assertNull(keeper.coolLeft())
+        assertEquals("nothing comes up by itself after the cool-down", RailPhase.Off, keeper.phase.value)
+
+        // The next piece (in the app, only once the safety check the fault made due has passed): a clean rail-up.
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(RAIL_UP_SETTLE_MS)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        assertTrue(bench.logs.any { "they keep the 24 V on between pieces again" in it })
+        advanceTimeBy(20_000)
+        val ended = currentTime
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(60_000)
+        assertEquals("the On hours hold it again", RailPhase.Up, keeper.phase.value)
+        assertFalse("no CUT after the piece", bench.kinds(from = ended).contains("CUT"))
+
+        // At their end the want goes as ever: the normal stop and CUT.
+        val night = currentTime
+        keeper.wanted(RailKeeper.HOURS, false)
+        advanceTimeBy(4_000)
+        assertEquals(listOf("STOP", "CUT"), bench.kinds(from = night).filter { it != "CHECK" && it != "ARM" && !it.startsWith("ASK") })
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        bench.assertEveryArmChecked()
+    }
+
+    @Test
+    fun `outside the On hours a piece's rail-up never brings their want back (v1_46 M81)`() = runTest {
+        val bench = Bench(this)
+        val watch = bench.Watch().apply { struck = false }
+        val keeper = bench.keeper(watch)
+        keeper.wanted(RailKeeper.HOURS, true)
+        advanceTimeBy(RAIL_UP_SETTLE_MS)
+        keeper.wanted(RailKeeper.HOURS, false)   // 22:00
+        advanceTimeBy(4_000)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(RAIL_UP_SETTLE_MS + 20_000)
+        val ended = currentTime
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(4_000)
+        assertTrue("the normal CUT", bench.kinds(from = ended).contains("CUT"))
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        assertFalse(bench.logs.any { "they keep the 24 V on between pieces again" in it })
+    }
+
+    @Test
     fun `a coil on cut by the safety check cools down too, a new keeper reading the store still cools, and Skip the cool-down ends it, logged (v1_40 M78)`() = runTest {
         val store = MemoryCool()
         val first = Bench(this)

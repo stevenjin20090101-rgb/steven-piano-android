@@ -23,7 +23,7 @@ import org.junit.Test
 import kotlin.math.roundToInt
 
 /**
- * Test every key (v1.23 — M55): its refusals in the brief's order, its timing (84 keys low to high, one every 450 ms, 150 ms
+ * Test every key (v1.23 — M55): its refusals in the brief's order, its timing (84 keys low to high, one every 300 ms, 100 ms
  * long, velocity 100), what it hears (on a piano out of tune since v1.32 — M69), and how it ends (Stop with the stop
  * sequence; a piece starting; the piano gone).
  */
@@ -147,7 +147,7 @@ class KeyTestTest {
     }
 
     @Test
-    fun `it strikes the 84 keys low to high, one every 450 ms, 150 ms each at velocity 100, the tablet silent, and names the keys not heard on a piano out of tune`() = runTest {
+    fun `it strikes the 84 keys low to high, one every 300 ms, 100 ms each at velocity 100, the tablet silent, and names the keys not heard on a piano out of tune`() = runTest {
         val (piano, ears, test) = setUp()
         room(piano, ears, dead = setOf(36, 66, 93))
         assertEquals(ListenAnswer.Started, test.start("A"))
@@ -170,7 +170,7 @@ class KeyTestTest {
         assertEquals(84, done.results!!.size)
         assertFalse("the tablet sounds again", piano.muted)
         assertNull("the microphone let go", ears.frames)
-        assertEquals("about 39 s", 38_900L, KeyTest.LEAD_MS + KeyTest.TOTAL * KeyTest.EVERY_MS + KeyTest.TAIL_MS)
+        assertEquals("about 26 s (v1_46 M81)", 26_300L, KeyTest.LEAD_MS + KeyTest.TOTAL * KeyTest.EVERY_MS + KeyTest.TAIL_MS)
         assertEquals(84, KeyTest.TOTAL)
         assertEquals((38_900 / 1000.0).roundToInt(), 39)
     }

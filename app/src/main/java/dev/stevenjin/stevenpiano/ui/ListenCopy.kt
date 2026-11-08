@@ -36,7 +36,7 @@ object ListenCopy {
 
     // ---- The key test ---------------------------------------------------------------------------------------------------
     const val TEST = "Test every key"
-    const val TEST_NOTE = "The piano strikes its 84 keys in turn, low to high, about 40 s; the microphone hears which ones didn't sound."
+    const val TEST_NOTE = "The piano strikes its 84 keys in turn, low to high, about 26 s; the microphone hears which ones didn't sound."
     const val STARTING = "Listening to the room…"
     const val CHECKING = "Checking the last keys…"
     const val NOT_TESTED = "Not tested yet"

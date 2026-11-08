@@ -37,26 +37,30 @@ data class Strike(val key: Int, val at: Int)
  * Frequency by frequency, a new note shows even while the keys before it still ring (the top keys have no dampers); the
  * loudest-before and the averaging keep a room's steady noise, rumble and hum from passing for a key. Under about 500 Hz
  * a key and the one before it share bins (a semitone is narrower than one), so there a key shows by sounding 6 dB over
- * what the key before still rang in the 120 ms before it: its damper must have quietened it. Still not heard: a key
+ * what the key before still rang in the [BEFORE_MS] before it: its damper must have quietened it. Still not heard: a key
  * already held down (no new blow), a dead channel, a steady room, digital silence, and any key whose audio before the
  * strike is missing ([SILENT_MS] or more of exact zeros, where [KeyTake] filled a gap): with no baseline, the safety
  * check's second sweep decides.
  *
  * The accepted trade-off: a solenoid's click counts as a sound (it proves the channel moved), and a loud sound in the
  * room at the very moment of a strike can count as that key. A key stuck on is still caught by the coil count
- * (`!active`) and by the power plug's watch and its usual idle. Pure, and cheap enough for the microphone's thread: 36
- * spectra of 512 points a key.
+ * (`!active`) and by the power plug's watch and its usual idle. Pure, and cheap enough for the microphone's thread: about
+ * 25 spectra of 512 points a key.
  */
 object KeyCheck {
     /** The capture's rate (16 kHz mono). */
     const val RATE = ListenWire.RATE
 
-    /** The baseline: the 120 ms before the strike (the key before was let go 300 ms before it). */
-    const val BEFORE_MS = 120
+    /**
+     * The baseline: the 60 ms before the strike (v1.46 — M81; 120 ms at one strike every 450 ms). The key before was let go
+     * 200 ms before the strike ([KeyTest.HOLD_MS]), so this starts 140 ms after it, its damper well down by then (it
+     * started 180 ms after before): in the bass, where a key shares bins with the one before, that is what lets it show.
+     */
+    const val BEFORE_MS = 60
 
-    /** The sound: from 30 ms after the strike to 330 ms after it (the next strike comes at 450 ms). */
+    /** The sound: from 30 ms after the strike to 280 ms after it (v1.46 — M81: the next strike comes at 300 ms, [KeyTest.EVERY_MS]). */
     const val FROM_MS = 30
-    const val TO_MS = 330
+    const val TO_MS = 280
 
     /** A frequency's new sound: what it gained beyond 6 dB (×4 in power) over its loudest before the strike. */
     const val RISE_DB = 6.0

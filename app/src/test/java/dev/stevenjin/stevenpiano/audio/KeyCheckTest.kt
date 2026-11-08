@@ -20,7 +20,7 @@ import kotlin.math.sin
 
 /**
  * Whether each key sounded, by ear (v1.32 — M69: any new sound right after its strike): sweeps of the piano's 84 keys made
- * up of synthetic notes over a room's noise, as the key test strikes them (one every 450 ms after 600 ms of the room), on a
+ * up of synthetic notes over a room's noise, as the key test strikes them (one every 300 ms after 600 ms of the room), on a
  * piano in tune and out of tune, quiet, or ringing on; and the rooms in which no key may pass for heard.
  */
 class KeyCheckTest {
