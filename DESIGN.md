@@ -401,3 +401,8 @@ Steven (2026-11-08, multiple choice): "Day, fixed after faults", "About 25 s", "
   tablet that froze at night can't leave the plug on unwatched (the SwitchBot has no timer of its own).
 - **The key check** strikes one key every 0.3 s, low to high, once (about 26 s; 39 s before). It still runs only in a check a
   fault called for. Keys not heard still only warn.
+- **The strip at rest.** Piano › Lights and screen gains **Between pieces** (Solid colour · Notes only, each with its line),
+  in Reactive with Album art or Custom (with Palette the page shows no colour to glow in), on a piano with firmware 2.1.3
+  (`!ledrestproto=1`). Solid colour, the default: while nothing plays the whole strip shows the colour at full level, and
+  the piano fades it to the notes as a piece starts (in its 2 s pause) and back as it ends, over Colour change's time. A
+  piece paused still counts as playing, so a pause never flashes the strip solid.

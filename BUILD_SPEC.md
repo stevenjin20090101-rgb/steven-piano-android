@@ -266,3 +266,12 @@ want, the hours' too. Keys, Turn the piano on, the safety check's own want and T
 window ends before the next strike; `KeyCheck.BEFORE_MS` 60 (120), so the baseline starts 140 ms after the key before was let go,
 its damper down by then (in the bass a key shares bins with the one before). The tests' made-up piano (`Tones`) holds each key
 `KeyTest.HOLD_MS`. Not yet heard on a real piano.
+
+**The strip at rest** (firmware 2.1.3, the Player Piano chat): `ledrest 0|1`, never kept (0 at boot; back to 0 when the
+Bluetooth link that set it drops; exactly `0` or `1`, else `  usage: ledrest 0|1`), the fact `!ledrestproto=1` after
+`!ledcolorproto`, the row after `ledambient` in `dump`. `piano/LedRest.kt` holds the rule (1 while nothing plays, with Solid
+colour, in Reactive, with Album art or Custom, outside guest play); `piano/LedRestKeeper.kt` sends it at each connection and
+each change, at most once a change, only with a writable lock. What plays: `Player.pieceSounding` (from a piece's start,
+paused included), `LiveState.onScreen` (the Keys tab, the only time a MIDI keyboard plays the piano), the key test (the safety
+check's sweep too). `PianoSettingsRepository.rest()` is always a temporary write that holds nothing back; `set()` refuses
+`ledrest`. The emulated piano speaks 2.1.3 and drops it with the link.

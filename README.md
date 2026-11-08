@@ -268,7 +268,10 @@ on the tablet*). Made by Steven Jin. Version 1.45.
   next; *Custom*: one picked from swatches or with hue and saturation, kept on the piano;
   *Palette*: the palettes as before, Reactive only), and in Reactive with Album art or
   Custom a **Background glow** (Off, Low, Medium, High) under the lit notes. A grey cover,
-  or none, shows the custom colour. These are the tablet's alone, not the web panel's.
+  or none, shows the custom colour. From 1.46, with piano firmware 2.1.3 or later, in Reactive
+  with Album art or Custom: **Between pieces**, *Solid colour* (the default: while nothing
+  plays the whole strip glows in the colour, and fades to the notes as a piece starts and back
+  as it ends) or *Notes only*. These are the tablet's alone, not the web panel's.
   Under **Strip set-up** its length, offset, scale, and **Colour change** (Instant to 3 s): how
   long the strip fades to a new colour; also
   the note glow, fade speed and a *Test LED* that lights one key's LED to line the strip up; then
