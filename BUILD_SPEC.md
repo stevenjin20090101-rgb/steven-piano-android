@@ -275,3 +275,7 @@ each change, at most once a change, only with a writable lock. What plays: `Play
 paused included), `LiveState.onScreen` (the Keys tab, the only time a MIDI keyboard plays the piano), the key test (the safety
 check's sweep too). `PianoSettingsRepository.rest()` is always a temporary write that holds nothing back; `set()` refuses
 `ledrest`. The emulated piano speaks 2.1.3 and drops it with the link.
+
+## The release: 1.46 (versionCode 57)
+
+Between pieces the LED strip can glow solid in the album art's colour, then fade to the notes as a piece plays (needs piano firmware 2.1.3). The strip can follow each piece's album art or a colour you pick on the tablet, with smooth fades and an optional background glow (firmware 2.1.2). After a power fault the 24 V comes back to staying on between pieces once the safety check passes; the cool-down is 10 minutes and its popup can skip it with the kiosk PIN; and the key check is faster, about 26 s. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.

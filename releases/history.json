@@ -506,10 +506,10 @@
     "publishedAt": "2026-11-03"
   },
   {
-    "versionCode": 56,
-    "versionName": "1.45",
-    "notes": "The LED strip can follow each piece's album art, or a colour you pick on the tablet, with smooth fades and an optional background glow (needs piano firmware 2.1.2). After a power fault the cool-down is 10 minutes, and its popup can skip it with the kiosk PIN; the safety check still runs. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.",
-    "tag": "v1.45",
+    "versionCode": 57,
+    "versionName": "1.46",
+    "notes": "Between pieces the LED strip can glow solid in the album art's colour, then fade to the notes as a piece plays (needs piano firmware 2.1.3). The strip can follow each piece's album art or a colour you pick on the tablet, with smooth fades and an optional background glow (firmware 2.1.2). After a power fault the 24 V comes back to staying on between pieces once the safety check passes; the cool-down is 10 minutes and its popup can skip it with the kiosk PIN; and the key check is faster, about 26 s. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.",
+    "tag": "v1.46",
     "draft": true
   }
 ]

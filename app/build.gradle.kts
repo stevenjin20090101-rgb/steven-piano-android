@@ -43,8 +43,8 @@ android {
         targetSdk = 36
         // -PversionCodeOverride=55 builds a copy that reads as newer than the one installed, for the
         // updater's emulator test (README > Updates); every real build takes the number below.
-        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 56
-        versionName = "1.45"
+        versionCode = providers.gradleProperty("versionCodeOverride").orNull?.toIntOrNull() ?: 57
+        versionName = "1.46"
     }
 
     signingConfigs {
