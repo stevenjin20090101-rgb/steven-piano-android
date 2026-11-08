@@ -12,14 +12,15 @@ package dev.stevenjin.stevenpiano.ui
 import dev.stevenjin.stevenpiano.piano.CoverTint
 import dev.stevenjin.stevenpiano.piano.LedColour
 import dev.stevenjin.stevenpiano.piano.LedColourSource
+import dev.stevenjin.stevenpiano.piano.LedRestChoice
 
 /** One of the custom colour's preset swatches (M80): its colour (0xRRGGBB) and the name TalkBack says. */
 data class LedSwatch(val name: String, val rgb: Int)
 
 /**
  * The words of the strip's colour (M80, Piano › Lights and screen): the rows' labels, the choice's chips, the line saying
- * what the loaded piece's cover gives, the preset swatches and how a colour is named aloud. The notes under the rows are
- * in [SettingNotes] with the others.
+ * what the loaded piece's cover gives, the preset swatches and how a colour is named aloud; and (M81) Between pieces. The
+ * notes under the rows are in [SettingNotes] with the others.
  */
 object LightsCopy {
     const val COLOUR = "Colour"
@@ -28,6 +29,9 @@ object LightsCopy {
     const val SATURATION = "Saturation"
     const val BACKGROUND_GLOW = "Background glow"
     const val COLOUR_CHANGE = "Colour change"
+
+    /** M81: what the strip shows while nothing plays, in Reactive. */
+    const val BETWEEN_PIECES = "Between pieces"
 
     fun source(source: LedColourSource): String = when (source) {
         LedColourSource.ALBUM_ART -> "Album art"
@@ -40,6 +44,18 @@ object LightsCopy {
         LedColourSource.ALBUM_ART -> SettingNotes.LED_COLOUR_ALBUM_ART
         LedColourSource.CUSTOM -> SettingNotes.LED_COLOUR_CUSTOM
         LedColourSource.PALETTE -> SettingNotes.LED_COLOUR_PALETTE
+    }
+
+    /** Between pieces' chips (M81). */
+    fun rest(choice: LedRestChoice): String = when (choice) {
+        LedRestChoice.SOLID -> "Solid colour"
+        LedRestChoice.NOTES -> "Notes only"
+    }
+
+    /** The note under Between pieces, for the choice shown (M81). */
+    fun restNote(choice: LedRestChoice): String = when (choice) {
+        LedRestChoice.SOLID -> SettingNotes.LED_REST_SOLID
+        LedRestChoice.NOTES -> SettingNotes.LED_REST_NOTES
     }
 
     /** With Album art: what the loaded piece ([title], null with none) gives the strip now ([cover], null while it is read). */

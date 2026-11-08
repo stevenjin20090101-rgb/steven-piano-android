@@ -63,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.piano.LedColour
 import dev.stevenjin.stevenpiano.piano.LedColourSource
+import dev.stevenjin.stevenpiano.piano.LedRestChoice
 import dev.stevenjin.stevenpiano.piano.PianoState
 import dev.stevenjin.stevenpiano.ui.LedSwatch
 import dev.stevenjin.stevenpiano.ui.LightsCopy
@@ -215,6 +216,23 @@ internal fun CustomColourRow(ready: PianoState.Ready, chosen: LedColourSource, a
         )
     }
     HairlineDivider(startInset = 16.dp)
+}
+
+/**
+ * Between pieces (M81, in Reactive on a piano that says `!ledrestproto=1`): Solid colour or Notes only, the tablet's own
+ * choice, with a line saying what it does. The keeper sends `ledrest` as it changes; the page writes nothing to the piano.
+ */
+@Composable
+internal fun BetweenPiecesRow(ready: PianoState.Ready, chosen: LedRestChoice, actions: PianoSettingsActions) {
+    val choices = LedRestChoice.entries
+    ChoiceRow(
+        LightsCopy.BETWEEN_PIECES,
+        choices.map(LightsCopy::rest),
+        choices.indexOf(chosen).takeIf { it >= 0 },
+        { actions.setLedRest(choices[it]) },
+        enabled = ready.lock.writable,
+        note = LightsCopy.restNote(chosen),
+    )
 }
 
 /** Background glow (`ledambient`, Reactive) or Colour change (`ledfade`): four named levels as chips. */

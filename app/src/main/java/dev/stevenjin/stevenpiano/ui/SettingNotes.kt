@@ -73,6 +73,11 @@ object SettingNotes {
     const val BACKGROUND_GLOW = "A dim wash of the colour under the lit notes"
     const val COLOUR_CHANGE = "How long the strip takes to fade to a new colour"
 
+    // ---- Lights and screen: the strip between pieces (M81, a piano with `!ledrestproto=1`) --------------
+
+    const val LED_REST_SOLID = "The whole strip glows in the colour while nothing plays"
+    const val LED_REST_NOTES = "Only the notes light, as they play"
+
     // ---- INSTRUMENTS -------------------------------------------------------------------------------
 
     const val AUTO_CONNECT = "Connects to the piano when the app opens"

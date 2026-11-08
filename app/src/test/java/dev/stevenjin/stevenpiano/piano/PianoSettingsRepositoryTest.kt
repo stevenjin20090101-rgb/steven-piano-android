@@ -319,6 +319,33 @@ class PianoSettingsRepositoryTest {
     }
 
     @Test
+    fun `the strip's rest never counts for a save, nor goes as a person's setting (M81)`() = runTest {
+        val repo = connected()
+        console.clearSent()
+        repo.rest(true)
+        settle()
+        assertEquals(listOf("ledrest 1", "get ledrest"), console.sent)
+        assertEquals("1", repo.ready().values["ledrest"])
+        console.clearSent()
+        repo.leave()
+        assertTrue("the rest alone asks for no save", console.sent.isEmpty())
+        repo.set("ledrest", "0")   // never a person's setting, so never a saved write
+        settle()
+        assertTrue(console.sent.isEmpty())
+        repo.set("ledbright", "40")
+        repo.rest(false)
+        settle()
+        console.clearSent()
+        repo.leave()
+        assertEquals("the brightness is saved; the rest went before and is not part of it", listOf("save"), console.sent)
+        repo.rest(true)
+        settle()
+        console.clearSent()
+        repo.leave()
+        assertTrue("a rest after the save asks for none", console.sent.isEmpty())
+    }
+
+    @Test
     fun `a piano without the strip's colour is sent none of it (M80)`() = runTest {
         val older = FakeConsole(EmulatedConsole(ledColour = false)::handle)
         val repo = connected(older)

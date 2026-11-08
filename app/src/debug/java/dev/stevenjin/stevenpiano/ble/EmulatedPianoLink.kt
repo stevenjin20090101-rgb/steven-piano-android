@@ -55,6 +55,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * says `!ledcolorproto=1`; each of those lines is logged again with what the strip would show ("LED strip: ledtint 3a7bd5
  * over ledcolor ffb066, fading over 1500 ms, …", `adb logcat -s PianoLink`). `adb shell setprop debug.stevenpiano.ledcolor
  * none` makes the next connection a piano without them (2.1.1 and earlier).
+ * The strip at rest (M81, firmware 2.1.3): it takes `ledrest 0|1` and says `!ledrestproto=1`; each `ledrest` line is logged
+ * with what the strip would show ("LED strip: ledrest 1 … at rest: solid"), and when the link drops a 1 goes back to 0 and
+ * says so ("LED strip: the link that set ledrest dropped: ledrest 0, …"). `adb shell setprop debug.stevenpiano.ledrest
+ * none` makes the next connection a 2.1.2 piano, without it.
  */
 class EmulatedPianoLink(
     private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty,
@@ -85,7 +89,12 @@ class EmulatedPianoLink(
             Log.d(TAG, "console > $text")
             if (mode == ConsoleMode.Mute) return
             val answer = synchronized(emulated) { emulated.handle(text) }
-            if (text.substringBefore(' ') in LED_COLOUR_KEYS) Log.i(TAG, "LED strip: " + synchronized(emulated) { emulated.stripColour() })
+            val key = text.substringBefore(' ')
+            if (key == LED_REST_KEY) {
+                Log.i(TAG, "LED strip: $text (${answer.firstOrNull()?.trim()}), " + synchronized(emulated) { emulated.stripColour() })
+            } else if (key in LED_COLOUR_KEYS) {
+                Log.i(TAG, "LED strip: " + synchronized(emulated) { emulated.stripColour() })
+            }
             main.postDelayed({
                 if (console === this) {
                     answer.forEach { line ->
@@ -132,7 +141,10 @@ class EmulatedPianoLink(
 
     private val found = Runnable {
         mode = consoleMode()
-        synchronized(emulated) { emulated.ledColour = SystemProperty.read(LED_COLOUR_PROPERTY).trim() != NO_LED_COLOUR }
+        synchronized(emulated) {
+            emulated.ledColour = SystemProperty.read(LED_COLOUR_PROPERTY).trim() != NO_LED_COLOUR
+            emulated.ledRest = SystemProperty.read(LED_REST_PROPERTY).trim() != NO_LED_REST   // M81
+        }
         console = if (mode == ConsoleMode.None) null else channel
         val fake = fakeOta()
         scenario = fake
@@ -173,6 +185,7 @@ class EmulatedPianoLink(
 
     private fun goAway(line: String) {
         LinkLog.shared.add(line)
+        restEnds()
         console = null
         ota = null
         version.value = null
@@ -219,11 +232,18 @@ class EmulatedPianoLink(
         main.removeCallbacks(found)
         main.removeCallbacks(notFound)
         if (_state.value != LinkState.Disconnected) LinkLog.shared.add("Disconnected (emulated)")
+        restEnds()
         console = null
         ota = null
         version.value = null
         address = null
         _state.value = LinkState.Disconnected
+    }
+
+    /** M81: the link dropped, so a `ledrest 1` it set ends (firmware 2.1.3): the strip back to the notes. */
+    private fun restEnds() {
+        val strip = synchronized(emulated) { if (emulated.linkDropped()) emulated.stripColour() else null } ?: return
+        Log.i(TAG, "LED strip: the link that set ledrest dropped: ledrest 0, $strip")
     }
 
     override fun send(batch: MidiBatch, dropPending: Boolean) {
@@ -265,6 +285,11 @@ class EmulatedPianoLink(
         private const val LED_COLOUR_PROPERTY = "debug.stevenpiano.ledcolor"
         private const val NO_LED_COLOUR = "none"
         private val LED_COLOUR_KEYS = setOf("ledcolor", "ledtint", "ledfade", "ledambient")
+
+        /** `debug.stevenpiano.ledrest none`: a piano without the strip at rest (M81, 2.1.2); unset, the 2.1.3 piano. */
+        private const val LED_REST_PROPERTY = "debug.stevenpiano.ledrest"
+        private const val NO_LED_REST = "none"
+        private const val LED_REST_KEY = "ledrest"
         private const val UNSET = "(unset)"
 
         /** The emulated piano's Bluetooth address, from the range RFC 7042 keeps for documentation. */

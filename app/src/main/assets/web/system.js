@@ -150,8 +150,9 @@ const WAITING_WORDS = { player: 'Paused', link: 'Connecting', relay: 'Reconnecti
 const SHOWN_FACTS = new Set([
   'temp', 'heap', 'heapmin', 'heapblock', 'heapsize', 'tasks', 'stack', 'looprate', 'loopms', 'rssi', 'active', 'trips', 'crashes',
   'i2cfails', 'uptime', 'repeatms', 'reset', 'ota', 'fw', 'boards', 'pedalboard',
-  // The protocol's own markers (BLE_SETTINGS.md › 4), not readings; M80's LED colour too (the tablet's Lights page uses it).
-  'proto', 'ble', 'ledcolorproto',
+  // The protocol's own markers (BLE_SETTINGS.md › 4), not readings; M80's LED colour and M81's rest too (the tablet's
+  // Lights page uses them).
+  'proto', 'ble', 'ledcolorproto', 'ledrestproto',
 ]);
 
 /** Where attention starts (the brief's rule, one place). */

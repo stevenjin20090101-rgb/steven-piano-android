@@ -478,5 +478,6 @@ object SystemCopy {
         "i2cfails", "uptime", "repeatms", "reset", "ota", "fw", "boards", "pedalboard", "proto", "ble",
         "lockproto", "lock", "auth", "nonce", "guest", "claim",
         "ledcolorproto",   // M80: the LED colour's marker, which the Lights page answers by showing its rows
+        "ledrestproto",   // M81: the strip's rest, likewise (Between pieces)
     )
 }
