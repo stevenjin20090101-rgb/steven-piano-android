@@ -42,17 +42,21 @@ object LedRest {
     fun accepts(value: String): Boolean = value == ON || value == OFF
 
     /**
-     * The value the tablet wants the piano to hold: [ON] while nothing [playing], with [SOLID][LedRestChoice.SOLID] chosen
-     * and the strip's [mode] Reactive, unless [guest] play has the piano; [OFF] otherwise; null (send nothing) on a piano
-     * that isn't [supported].
+     * The value the tablet wants the piano to hold: [ON] while nothing [playing], with [SOLID][LedRestChoice.SOLID] chosen,
+     * the strip's [mode] Reactive and its [colour] Album art or Custom (with Palette the page shows no colour to glow in),
+     * unless [guest] play has the piano; [OFF] otherwise; null (send nothing) on a piano that isn't [supported].
      */
-    fun wanted(supported: Boolean, mode: String?, choice: LedRestChoice, playing: Boolean, guest: Boolean): String? = when {
+    fun wanted(supported: Boolean, mode: String?, choice: LedRestChoice, colour: LedColourSource, playing: Boolean, guest: Boolean): String? = when {
         !supported -> null
-        choice == LedRestChoice.SOLID && mode?.trim() == LedColour.REACTIVE && !playing && !guest -> ON
+        choice == LedRestChoice.SOLID && mode?.trim() == LedColour.REACTIVE && colour != LedColourSource.PALETTE && !playing && !guest -> ON
         else -> OFF
     }
 
-    /** Whether Lights and screen shows Between pieces for [ready] (null: not read yet): in Reactive, on a piano with the fact. */
-    fun shows(ready: PianoState.Ready?): Boolean =
-        ready != null && supported(ready.facts) && ready.values[LedColour.MODE]?.trim() == LedColour.REACTIVE
+    /**
+     * Whether Lights and screen shows Between pieces for [ready] (null: not read yet): in Reactive, with the tablet's [colour]
+     * Album art or Custom, on a piano with the fact.
+     */
+    fun shows(ready: PianoState.Ready?, colour: LedColourSource): Boolean =
+        ready != null && supported(ready.facts) && ready.values[LedColour.MODE]?.trim() == LedColour.REACTIVE &&
+            colour != LedColourSource.PALETTE
 }

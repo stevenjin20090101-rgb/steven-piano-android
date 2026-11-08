@@ -159,7 +159,7 @@ object LedColour {
             PianoRow.CustomColour -> supported && coloured && source != LedColourSource.PALETTE
             PianoRow.BackgroundGlow -> supported && glowShows(chosen, mode)
             PianoRow.ColourChange -> supported
-            PianoRow.BetweenPieces -> LedRest.shows(ready)   // M81: its own fact, in Reactive
+            PianoRow.BetweenPieces -> LedRest.shows(ready, source)   // M81: its own fact, in Reactive, Album art or Custom
             else -> !supported || (mode == REACTIVE && source == LedColourSource.PALETTE)   // the palette
         }
     }

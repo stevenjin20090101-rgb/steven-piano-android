@@ -28,19 +28,23 @@ class LedRestTest {
     @Test
     fun `1 only while nothing plays, with Solid colour, in Reactive, outside guest play`() {
         val solid = LedRestChoice.SOLID
-        assertEquals("1", LedRest.wanted(true, LedColour.REACTIVE, solid, playing = false, guest = false))
-        assertEquals("a piece, the Keys tab, a key test", "0", LedRest.wanted(true, LedColour.REACTIVE, solid, playing = true, guest = false))
-        assertEquals("0", LedRest.wanted(true, LedColour.REACTIVE, LedRestChoice.NOTES, playing = false, guest = false))
-        assertEquals("Static", "0", LedRest.wanted(true, LedColour.STATIC, solid, playing = false, guest = false))
-        assertEquals("Rainbow", "0", LedRest.wanted(true, "2", solid, playing = false, guest = false))
-        assertEquals("guest play", "0", LedRest.wanted(true, LedColour.REACTIVE, solid, playing = false, guest = true))
-        assertNull("a piano without !ledrestproto=1: nothing", LedRest.wanted(false, LedColour.REACTIVE, solid, playing = false, guest = false))
+        val art = LedColourSource.ALBUM_ART
+        assertEquals("1", LedRest.wanted(true, LedColour.REACTIVE, solid, art, playing = false, guest = false))
+        assertEquals("a piece, the Keys tab, a key test", "0", LedRest.wanted(true, LedColour.REACTIVE, solid, art, playing = true, guest = false))
+        assertEquals("0", LedRest.wanted(true, LedColour.REACTIVE, LedRestChoice.NOTES, art, playing = false, guest = false))
+        assertEquals("Static", "0", LedRest.wanted(true, LedColour.STATIC, solid, art, playing = false, guest = false))
+        assertEquals("Rainbow", "0", LedRest.wanted(true, "2", solid, art, playing = false, guest = false))
+        assertEquals("guest play", "0", LedRest.wanted(true, LedColour.REACTIVE, solid, art, playing = false, guest = true))
+        assertEquals("Custom", "1", LedRest.wanted(true, LedColour.REACTIVE, solid, LedColourSource.CUSTOM, playing = false, guest = false))
+        assertEquals("Palette: no colour to glow in", "0", LedRest.wanted(true, LedColour.REACTIVE, solid, LedColourSource.PALETTE, playing = false, guest = false))
+        assertNull("a piano without !ledrestproto=1: nothing", LedRest.wanted(false, LedColour.REACTIVE, solid, art, playing = false, guest = false))
     }
 
     private val link = FakePianoLink()
     private val piano = EmulatedConsole()
     private val console = FakeConsole(piano::handle)
     private val choice = MutableStateFlow(LedRestChoice.SOLID)
+    private val colour = MutableStateFlow(LedColourSource.ALBUM_ART)
     private val playing = MutableStateFlow(false)
     private val guest = MutableStateFlow(false)
 
@@ -48,7 +52,7 @@ class LedRestTest {
         link.connectedWith(console)
         val repo = PianoSettingsRepository(link, backgroundScope, log = {})
         repo.start()
-        LedRestKeeper(repo.state, choice, playing, guest, repo::rest, backgroundScope, log = {}).start()
+        LedRestKeeper(repo.state, choice, colour, playing, guest, repo::rest, backgroundScope, log = {}).start()
         settle()
         return repo
     }
@@ -102,7 +106,7 @@ class LedRestTest {
     }
 
     @Test
-    fun `guest play holds it at 0, over the connection that ends it too`() = runTest {
+    fun `guest play holds it at 0 while it lasts, and the tablet's want comes back once it is over`() = runTest {
         keeping()
         assertEquals(listOf("ledrest 1"), writes())
         guest.value = true   // `lock guest 60`: the iPad's notes are to show
@@ -110,12 +114,10 @@ class LedRestTest {
         assertEquals(listOf("ledrest 0"), writes())
         link.drop()   // the tablet lets go of the piano
         runCurrent()
-        guest.value = false   // guest play ends: the tablet connects again for `lock guest 0`
+        guest.value = false   // guest play over: the tablet connects again (`lock guest 0`), and may stay (v1.46: the 24 V on)
         link.connectedWith(console)
         settle()
-        assertEquals("nothing sends 1 over guest play's own connection", emptyList<String>(), writes())
-        reconnect()
-        assertEquals("the next connection is the tablet's again", listOf("ledrest 1"), writes())
+        assertEquals("the tablet's want again, on the connection that ended it", listOf("ledrest 1"), writes())
         // Without the power plug the tablet keeps its connection through guest play: 0 while it lasts, 1 after.
         guest.value = true
         settle()
@@ -124,6 +126,18 @@ class LedRestTest {
         assertEquals(listOf("ledrest 0", "ledrest 1"), writes())
         reconnect()
         assertEquals("and the next connection is the tablet's own", listOf("ledrest 1"), writes())
+    }
+
+    @Test
+    fun `Palette sends 0, Album art or Custom 1 again`() = runTest {
+        keeping()
+        assertEquals(listOf("ledrest 1"), writes())
+        colour.value = LedColourSource.PALETTE
+        settle()
+        assertEquals(listOf("ledrest 0"), writes())
+        colour.value = LedColourSource.CUSTOM
+        settle()
+        assertEquals(listOf("ledrest 1"), writes())
     }
 
     @Test

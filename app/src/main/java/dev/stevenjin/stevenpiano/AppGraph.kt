@@ -458,6 +458,7 @@ class AppGraph(private val app: Application) {
         LedRestKeeper(
             piano = pianoSettings.state,
             choice = settingsRepository.settings.map { it.ledRest },
+            colour = settingsRepository.settings.map { it.ledColourSource },
             playing = combine(
                 player.pieceSounding,
                 liveThru.state.map { it.onScreen },
