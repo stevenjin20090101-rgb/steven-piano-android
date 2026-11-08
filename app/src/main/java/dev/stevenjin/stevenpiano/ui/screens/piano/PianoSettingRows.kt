@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.stevenjin.stevenpiano.piano.LedColour
 import dev.stevenjin.stevenpiano.piano.LedColourSource
+import dev.stevenjin.stevenpiano.piano.LedRest
+import dev.stevenjin.stevenpiano.piano.LedRestChoice
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoPage
@@ -99,6 +101,9 @@ interface PianoSettingsActions {
 
     /** M80: where the strip's colour comes from, the tablet's own choice (Lights and screen › Colour). */
     fun setLedColourSource(source: LedColourSource)
+
+    /** M81: what the strip shows between pieces, the tablet's own choice (Lights and screen › Between pieces). */
+    fun setLedRest(choice: LedRestChoice)
 
     fun runPianoAction(action: PianoAction, key: Int)
 
@@ -207,7 +212,9 @@ private fun PianoSettingsSection(
     val place = error?.let { placeOf(ready.errorAbout) }
     val writable = ready?.lock?.writable == true   // v1.25 — M58: the piano's lock lets this tablet change it
     // M80: the strip's colour, on a piano that says `!ledcolorproto=1`; its rows and the palette follow the tablet's choice.
-    val chosen = LocalContext.current.graph.settings.collectAsStateWithLifecycle().value.ledColourSource
+    // M81: and what it shows between pieces, on a piano that says `!ledrestproto=1`.
+    val tablet = LocalContext.current.graph.settings.collectAsStateWithLifecycle().value
+    val chosen = tablet.ledColourSource
     val reduced = rememberReducedMotion()
     for (row in PianoSettings.rows(section)) {
         val shown = LedColour.shows(row, ready, chosen)
@@ -231,6 +238,7 @@ private fun PianoSettingsSection(
                     PianoRow.ColourChange -> ready?.let {
                         LevelRow(LightsCopy.COLOUR_CHANGE, LedColour.FADES, LedColour.FADE, SettingNotes.COLOUR_CHANGE, it, actions)
                     }
+                    PianoRow.BetweenPieces -> ready?.let { BetweenPiecesRow(it, tablet.ledRest, actions) }   // M81
                 }
                 if (error != null && place == placeKey(row)) ErrorBanner(error, actions::dismissPianoError)
             }
@@ -250,6 +258,7 @@ private fun placeOf(about: String?): String = when {
     about == null -> READ_STATUS
     PianoSettings.named(about) != null -> about
     about in LedColour.names -> about   // M80: under the colour's own row (the tint's under Colour)
+    about == LedRest.KEY -> about   // M81: under Between pieces
     about == PianoAction.LedTest.command -> about
     about == PianoAction.TestMin.command || about == PianoAction.TestMax.command -> STRIKE_TEST
     PianoSettings.presets.any { it.command == about } -> PRESETS
@@ -269,6 +278,7 @@ private fun placeKey(row: PianoRow): String? = when (row) {
     PianoRow.CustomColour -> LedColour.COLOR
     PianoRow.BackgroundGlow -> LedColour.AMBIENT
     PianoRow.ColourChange -> LedColour.FADE
+    PianoRow.BetweenPieces -> LedRest.KEY
     is PianoRow.Reading, PianoRow.KeyForceNote -> null
 }
 

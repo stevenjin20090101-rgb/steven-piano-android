@@ -11,6 +11,7 @@ package dev.stevenjin.stevenpiano.ui.screens.piano
 
 import androidx.compose.runtime.Immutable
 import dev.stevenjin.stevenpiano.piano.LedColour
+import dev.stevenjin.stevenpiano.piano.LedRest
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoRow
 import dev.stevenjin.stevenpiano.piano.PianoSection
@@ -83,6 +84,7 @@ object SettingsIndex {
         PianoRow.CustomColour -> LedColour.COLOR
         PianoRow.BackgroundGlow -> LedColour.AMBIENT
         PianoRow.ColourChange -> LedColour.FADE
+        PianoRow.BetweenPieces -> LedRest.KEY   // M81: the tablet's own choice, anchored on the key it drives
         PianoRow.KeyForceNote -> null
     }
 
@@ -151,6 +153,7 @@ object SettingsIndex {
             PianoRow.CustomColour -> LightsCopy.CUSTOM_COLOUR
             PianoRow.BackgroundGlow -> LightsCopy.BACKGROUND_GLOW
             PianoRow.ColourChange -> LightsCopy.COLOUR_CHANGE
+            PianoRow.BetweenPieces -> LightsCopy.BETWEEN_PIECES
             PianoRow.KeyForceNote -> return null
         }
         val path = listOfNotNull(group, page.title, section.fold?.title ?: section.title)
@@ -206,6 +209,7 @@ object SettingsIndex {
         LedColour.COLOR to listOf("color", "pick a colour", "hue", "swatch"),
         LedColour.AMBIENT to listOf("ambient", "glow", "wash"),
         LedColour.FADE to listOf("fade", "transition", "color change"),
+        LedRest.KEY to listOf("idle", "rest", "solid", "notes only", "between songs"),   // M81
         "ledcount" to listOf("LEDs", "length"),
         "dimsecs" to listOf("display", "dim"),
         "dimfloor" to listOf("display", "dim"),

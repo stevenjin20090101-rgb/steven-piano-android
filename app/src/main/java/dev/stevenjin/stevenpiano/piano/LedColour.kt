@@ -159,13 +159,17 @@ object LedColour {
             PianoRow.CustomColour -> supported && coloured && source != LedColourSource.PALETTE
             PianoRow.BackgroundGlow -> supported && glowShows(chosen, mode)
             PianoRow.ColourChange -> supported
+            PianoRow.BetweenPieces -> LedRest.shows(ready, source)   // M81: its own fact, in Reactive, Album art or Custom
             else -> !supported || (mode == REACTIVE && source == LedColourSource.PALETTE)   // the palette
         }
     }
 
-    /** The rows that come and go with the colour's choice ([shows]): its own four, and the Reactive palette. */
+    /**
+     * The rows that come and go with the colour's choice ([shows]): its own four, and the Reactive palette; and M81's
+     * Between pieces, which comes and goes with the mode the same way.
+     */
     fun dependsOnColour(row: PianoRow): Boolean = when (row) {
-        PianoRow.ColourSource, PianoRow.CustomColour, PianoRow.BackgroundGlow, PianoRow.ColourChange -> true
+        PianoRow.ColourSource, PianoRow.CustomColour, PianoRow.BackgroundGlow, PianoRow.ColourChange, PianoRow.BetweenPieces -> true
         is PianoRow.Control -> row.setting.name == PALETTE
         else -> false
     }

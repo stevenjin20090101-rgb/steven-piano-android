@@ -75,6 +75,7 @@ import dev.stevenjin.stevenpiano.midi.KeyEvents
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.net.NetworkMonitor
 import dev.stevenjin.stevenpiano.piano.LedColourKeeper
+import dev.stevenjin.stevenpiano.piano.LedRestKeeper
 import dev.stevenjin.stevenpiano.piano.LockKeys
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoSettingsRepository
@@ -445,6 +446,30 @@ class AppGraph(private val app: Application) {
         )
     }
 
+    /**
+     * M81: the strip between pieces as Piano › Lights and screen chose it, on a piano that says `!ledrestproto=1`: `ledrest 1`
+     * while nothing plays (Solid colour, in Reactive), `ledrest 0` as soon as something does. What plays: a piece from its
+     * start (its pause before the first note too) until it is over, paused included ([Player.pieceSounding]); the Keys tab
+     * on screen, which is also the only time a MIDI keyboard plays the piano (Live opens only then); Test every key, which
+     * is also the safety check's sweep. Guest play holds it at 0: the piano's lock says guest play is on, or the tablet let go
+     * of the piano for it ([RailKeeper.guestUntil]). It follows those and runs nothing on a clock.
+     */
+    val ledRest: LedRestKeeper by lazy {
+        LedRestKeeper(
+            piano = pianoSettings.state,
+            choice = settingsRepository.settings.map { it.ledRest },
+            colour = settingsRepository.settings.map { it.ledColourSource },
+            playing = combine(
+                player.pieceSounding,
+                liveThru.state.map { it.onScreen },
+                remote.keyTest.state.map { it.running },
+            ) { piece, keys, test -> piece || keys || test },
+            guest = combine(rail.guestUntil, pianoSettings.lock) { until, lock -> until != null || lock.guestSeconds > 0 },
+            send = pianoSettings::rest,
+            scope = appScope,
+        )
+    }
+
     /** The channels, in their order on screen (Calm, Epic, Baroque…), read from the app's assets the first time, off the main thread. */
     val channels: List<Channel> by lazy { Channels.load(app, builtIns.lists) }
 
@@ -680,6 +705,7 @@ class AppGraph(private val app: Application) {
             followLive()
             remote.followPlaying()   // v1.23 — M55: since when nothing plays, for a key held on
             startRail()   // v1.26 — M60: the 24 V rail on its smart plug (see the M60 block)
+            ledRest.start()   // M81: after what it follows (the player, Live, the key test, the rail), before the piano connects
             launch { recording.recoverPending() }   // takes a crash left behind (v1.11 — M29), beside the rest
             // Permission is only ever asked for on the Piano tab; without it, launch stays quiet. A MIDI piano (v1.11 — M29)
             // connects with the same switch; by cable it needs no permission.

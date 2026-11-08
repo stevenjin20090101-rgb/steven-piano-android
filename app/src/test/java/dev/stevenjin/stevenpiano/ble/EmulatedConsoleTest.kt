@@ -27,19 +27,29 @@ class EmulatedConsoleTest {
         )
         assertEquals("end", dump.last())
         assertEquals("M80: the LED colour's fact after the others", "!ledcolorproto=1", dump[7])
-        assertEquals(8 + 47 + 1, dump.size)
+        assertEquals("M81: the strip at rest's after it", "!ledrestproto=1", dump[8])
+        assertEquals(9 + 48 + 1, dump.size)
         assertTrue(dump.all { it == "end" || '=' in it })
         // M80, firmware 2.1.2: the strip's colour after rainspeed, read back lower case, refused in the firmware's words.
         val rainspeed = dump.indexOfFirst { it.startsWith("rainspeed=") }
-        assertEquals(listOf("ledcolor=ffb066", "ledtint=off", "ledfade=1500", "ledambient=0"), dump.subList(rainspeed + 1, rainspeed + 5))
+        assertEquals(listOf("ledcolor=ffb066", "ledtint=off", "ledfade=1500", "ledambient=0", "ledrest=0"), dump.subList(rainspeed + 1, rainspeed + 6))
         assertEquals(listOf("  ledcolor = ff8800"), console.handle("ledcolor FF8800"))
         assertEquals(listOf("ledcolor=ff8800"), console.handle("get ledcolor"))
         assertEquals(listOf("  usage: ledcolor RRGGBB (6 hex digits)"), console.handle("ledcolor #ff8800"))
         assertEquals(listOf("  usage: ledtint RRGGBB|off"), console.handle("ledtint red"))
         assertEquals(listOf("  ledfade out of range (0..5000 ms)"), console.handle("ledfade 6000"))
         assertEquals(listOf("  ledambient out of range (0..64)"), console.handle("ledambient 65"))
+        // M81, firmware 2.1.3: exactly 0 or 1, back to 0 when the link that set it drops.
+        assertEquals(listOf("  usage: ledrest 0|1"), console.handle("ledrest on"))
+        assertEquals(listOf("  LED rest = 1 (live only, never saved; ends with this Bluetooth link)"), console.handle("ledrest 1"))
+        assertEquals(listOf("ledrest=1"), console.handle("get ledrest"))
+        assertTrue(console.linkDropped())
+        assertEquals(listOf("ledrest=0"), console.handle("get ledrest"))
         val older = EmulatedConsole(ledColour = false).handle("dump")
         assertEquals("2.1.1 and earlier: none of it", 7 + 43 + 1, older.size)
+        val noRest = EmulatedConsole(ledRest = false)
+        assertEquals("2.1.2: the colour without the rest", 8 + 47 + 1, noRest.handle("dump").size)
+        assertEquals(listOf("  unknown command — type 'help'"), noRest.handle("ledrest 1"))
     }
 
     @Test

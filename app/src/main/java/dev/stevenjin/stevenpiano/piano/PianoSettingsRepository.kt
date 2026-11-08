@@ -159,7 +159,7 @@ class PianoSettingsRepository(
     /**
      * Changes setting [name] to [value] (its wire form). Shown at once; sent 150 ms after the last change to it. Besides the
      * table, the LED colour's saved keys (M80: `ledcolor`, `ledfade`, `ledambient`), only on a piano that says
-     * `!ledcolorproto=1`; never `ledtint`, which only [tint] sends.
+     * `!ledcolorproto=1`; never `ledtint`, which only [tint] sends, nor `ledrest` (M81), which only [rest] sends.
      */
     fun set(name: String, value: String) {
         session?.set(name, value)
@@ -197,6 +197,16 @@ class PianoSettingsRepository(
      */
     fun tint(value: String) {
         session?.set(LedColour.TINT, value, temporary = true, hold = false)
+    }
+
+    /**
+     * The strip at rest between pieces (M81): `ledrest 1` ([on]), the colour shown solid along the strip in Reactive, or
+     * `ledrest 0`. Sent as [tint] is, always a temporary write: it never counts for a save, nor holds one back, and the
+     * piano never stores it (its `save` doesn't know it; it ends with the link that set it). Nothing on a piano without
+     * `!ledrestproto=1`.
+     */
+    fun rest(on: Boolean) {
+        session?.set(LedRest.KEY, if (on) LedRest.ON else LedRest.OFF, temporary = true, hold = false)
     }
 
     /** Applies a feel preset on the piano, then reads everything again: a preset changes several settings. */
@@ -497,12 +507,14 @@ class PianoSettingsRepository(
         /**
          * [temporary]: never counted for a save; [hold] (with it, as [holdTemporarily] asks): a save waits until it is
          * released. M80: the LED colour's keys only where the dump said `!ledcolorproto=1`, each with its own wire form,
-         * and the tint only ever as a temporary write that holds nothing back.
+         * and the tint only ever as a temporary write that holds nothing back. M81: `ledrest` the same way, where the dump
+         * said `!ledrestproto=1`, exactly `0` or `1`.
          */
         fun set(name: String, value: String, temporary: Boolean = false, hold: Boolean = temporary) {
             val setting = PianoSettings.named(name)
             val led = name in LedColour.names
             val valid = when {
+                name == LedRest.KEY -> LedRest.supported(facts) && LedRest.accepts(value) && temporary && !hold
                 led -> LedColour.supported(facts) && LedColour.accepts(name, value) && (name != LedColour.TINT || (temporary && !hold))
                 setting == null || setting.readOnly -> false
                 else -> WIRE_VALUE.matches(value)
@@ -647,8 +659,8 @@ class PianoSettingsRepository(
             val person = lastCommand
             send("$name $value")
             // M80: the strip's tint goes by itself at every piece, so an unnamed refusal after it is never put on it (a
-            // refusal of the tint names it: "usage: ledtint RRGGBB|off").
-            if (name == LedColour.TINT) lastCommand = person
+            // refusal of the tint names it: "usage: ledtint RRGGBB|off"). M81: the strip's rest too ("usage: ledrest 0|1").
+            if (name == LedColour.TINT || name == LedRest.KEY) lastCommand = person
             for (read in listOf(name) + PianoSettings.alsoRead[name].orEmpty()) {
                 if (read.startsWith("!") && read.removePrefix("!") !in facts) continue
                 awaiting += Awaited(read, if (read == name) write else null)
@@ -844,6 +856,7 @@ class PianoSettingsRepository(
             val first = words.firstOrNull().orEmpty().let { if (it == "minwhite") "min" else it }
             val known = PianoSettings.named(first) != null ||
                 first in LedColour.names ||   // M80: "usage: ledcolor RRGGBB (6 hex digits)", "ledfade out of range (0..5000 ms)"
+                first == LedRest.KEY ||   // M81: "usage: ledrest 0|1"
                 PianoAction.entries.any { it.command == first } ||
                 PianoSettings.presets.any { it.command == first }
             return first.takeIf { known }

@@ -205,6 +205,12 @@ sealed interface PianoRow {
     /** STRIP (M80), in Reactive on the Solid palette: a dim glow of the colour along the strip, `ledambient`. */
     data object BackgroundGlow : PianoRow
 
+    /**
+     * STRIP (M81, in Reactive on a piano that says `!ledrestproto=1`): what the strip shows between pieces, Solid colour or
+     * Notes only ([LedRestChoice], the tablet's own choice; `ledrest` follows it).
+     */
+    data object BetweenPieces : PianoRow
+
     /** MOTION (M80): how long the strip takes to fade to a new colour, `ledfade`. */
     data object ColourChange : PianoRow
 }
@@ -342,7 +348,10 @@ object PianoSettings {
                 add(PianoRow.Control(setting))
             }
             when (section) {
-                PianoSection.Strip -> add(PianoRow.BackgroundGlow)
+                PianoSection.Strip -> {
+                    add(PianoRow.BetweenPieces)   // M81
+                    add(PianoRow.BackgroundGlow)
+                }
                 PianoSection.Motion -> add(PianoRow.ColourChange)
                 PianoSection.Touch -> {
                     add(PianoRow.KeyForceNote)

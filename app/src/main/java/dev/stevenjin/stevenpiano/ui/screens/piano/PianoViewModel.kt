@@ -40,6 +40,7 @@ import dev.stevenjin.stevenpiano.instruments.MidiPicker
 import dev.stevenjin.stevenpiano.instruments.MidiPurpose
 import dev.stevenjin.stevenpiano.instruments.MidiScan
 import dev.stevenjin.stevenpiano.piano.LedColourSource
+import dev.stevenjin.stevenpiano.piano.LedRestChoice
 import dev.stevenjin.stevenpiano.piano.PianoAction
 import dev.stevenjin.stevenpiano.piano.PianoFold
 import dev.stevenjin.stevenpiano.piano.PianoState
@@ -192,6 +193,8 @@ class PianoViewModel(private val graph: AppGraph, private val saved: SavedStateH
     override fun applyPreset(command: String) = graph.pianoSettings.preset(command)
 
     override fun setLedColourSource(source: LedColourSource) = edit { setLedColourSource(source) }   // M80
+
+    override fun setLedRest(choice: LedRestChoice) = edit { setLedRest(choice) }   // M81
 
     override fun runPianoAction(action: PianoAction, key: Int) = graph.pianoSettings.action(action, key)
 

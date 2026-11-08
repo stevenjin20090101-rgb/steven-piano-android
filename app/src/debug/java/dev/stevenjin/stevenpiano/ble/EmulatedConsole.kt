@@ -24,8 +24,16 @@ import java.util.Locale
  * With [ledColour] (M80, firmware 2.1.2, the default) it has the strip's colour: `ledcolor`, `ledtint`, `ledfade` and
  * `ledambient` after `rainspeed`, read back lower case, the tint never kept by `save`, and `!ledcolorproto=1` after the
  * lock's facts (where 2.1.2 lists it, after `!restartproto`, which this stand-in doesn't report). Without, none of them.
+ * With [ledRest] too (M81, firmware 2.1.3, the default) it has the strip at rest: `ledrest` after `ledambient`, exactly `0`
+ * or `1` ("usage: ledrest 0|1" otherwise), never kept by `save`, back to 0 when the link that set it drops
+ * ([linkDropped]), and `!ledrestproto=1` after `!ledcolorproto=1`. Without (2.1.2), neither.
  */
-class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: EmulatedLock? = null, var ledColour: Boolean = true) {
+class EmulatedConsole(
+    facts: Map<String, String> = DEFAULT_FACTS,
+    var lock: EmulatedLock? = null,
+    var ledColour: Boolean = true,
+    var ledRest: Boolean = true,
+) {
     private val facts = LinkedHashMap(facts)
     private val values = LinkedHashMap<String, String>().apply { TUNABLES.forEach { put(it.name, it.default) } }
 
@@ -74,7 +82,7 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
             name == "ledtest" -> ledTest(argument)
             name == "testmin" || name == "testmax" -> strikeTest(name == "testmax", argument)
             name == "note" -> emptyList()
-            argument.isNotEmpty() && (name in values || name == "minwhite") && (ledColour || name !in LED_COLOUR) ->
+            argument.isNotEmpty() && (name in values || name == "minwhite") && has(name) ->
                 set(if (name == "minwhite") "min" else name, argument)
             else -> listOf("  unknown command — type 'help'")
         }
@@ -82,10 +90,11 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
 
     /** The value [name] holds, as `dump` writes it; facts with their "!" (the lock's too). */
     fun valueOf(name: String): String? {
-        if (!name.startsWith("!")) return values[name]?.takeIf { ledColour || name !in LED_COLOUR }
+        if (!name.startsWith("!")) return values[name]?.takeIf { has(name) }
         val fact = name.removePrefix("!")
         if (fact == BOARDS) railBoards()?.let { return it }
         if (fact == LED_COLOR_PROTO && ledColour) return "1"
+        if (fact == LED_REST_PROTO && restsHere()) return "1"
         return facts[fact] ?: lock?.fact(fact)
     }
 
@@ -93,13 +102,35 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
         facts.map { (name, value) -> "!$name=" + (if (name == BOARDS) railBoards() ?: value else value) } +
             lock?.facts().orEmpty().map { (name, value) -> "!$name=$value" } +
             (if (ledColour) listOf("!$LED_COLOR_PROTO=1") else emptyList()) +
-            values.filterKeys { ledColour || it !in LED_COLOUR }.map { (name, value) -> "$name=$value" } + "end"
+            (if (restsHere()) listOf("!$LED_REST_PROTO=1") else emptyList()) +
+            values.filterKeys(::has).map { (name, value) -> "$name=$value" } + "end"
+
+    /** Whether this piano has [name]: the LED colour's keys from 2.1.2 ([ledColour]), `ledrest` from 2.1.3 ([ledRest]). */
+    private fun has(name: String): Boolean = when (name) {
+        LED_REST -> restsHere()
+        in LED_COLOUR -> ledColour
+        else -> true
+    }
+
+    /** 2.1.3 has the strip's colour too. */
+    private fun restsHere(): Boolean = ledColour && ledRest
+
+    /**
+     * The link that set `ledrest` dropped (M81, firmware 2.1.3): it goes back to 0, as the piano lets the strip down to the
+     * notes. True when it was 1 (the emulator's log says so).
+     */
+    fun linkDropped(): Boolean {
+        val was = values[LED_REST] == "1"
+        values[LED_REST] = "0"
+        return was
+    }
 
     /** What the strip shows now, in words, for the emulator's log (M80): the tint over the colour, and the fade to it. */
     fun stripColour(): String {
         val tint = values["ledtint"]
         val shown = if (tint == null || tint == "off") "ledcolor ${values["ledcolor"]}" else "ledtint $tint over ledcolor ${values["ledcolor"]}"
-        return "$shown, fading over ${values["ledfade"]} ms, glow ${values["ledambient"]}, mode ${values["ledmode"]}, palette ${values["reactcolor"]}"
+        val rest = if (!restsHere()) "" else if (values[LED_REST] == "1") ", at rest: solid" else ", at rest: notes only"
+        return "$shown, fading over ${values["ledfade"]} ms, glow ${values["ledambient"]}, mode ${values["ledmode"]}, palette ${values["reactcolor"]}$rest"
     }
 
     /** `get`'s line: a setting as `name=value`; a fact as `!name=value`, named with its "!" or without (v1.26 — M60: as the firmware). */
@@ -156,6 +187,14 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
                 } else {
                     listOf(if (range.off) "  usage: $name RRGGBB|off" else "  usage: $name RRGGBB (6 hex digits)")
                 }
+            }
+            // M81, firmware 2.1.3: exactly 0 or 1, live only.
+            Range.Rest -> if (argument == "0" || argument == "1") {
+                values[name] = argument
+                val elsewhere = if (values["ledmode"] == "3") "" else "; it shows in reactive mode only"
+                listOf("  LED rest = $argument (live only, never saved; ends with this Bluetooth link)$elsewhere")
+            } else {
+                listOf("  usage: $name 0|1")
             }
             Range.Refused -> listOf("  refused over Bluetooth — use the USB console")
         }
@@ -215,6 +254,9 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
         /** Six hex digits; [off]: or `off` (the tint). */
         data class Hex(val off: Boolean = false) : Range
 
+        /** M81: exactly `0` or `1` (`ledrest`; not the switches' atoi). */
+        data object Rest : Range
+
         data class Decimal(val low: Float, val high: Float) : Range
 
         data object Refused : Range
@@ -229,6 +271,10 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
         /** The LED colour's keys and fact (M80, firmware 2.1.2). */
         private val LED_COLOUR = setOf("ledcolor", "ledtint", "ledfade", "ledambient")
         private const val LED_COLOR_PROTO = "ledcolorproto"
+
+        /** The strip at rest's key and fact (M81, firmware 2.1.3). */
+        private const val LED_REST = "ledrest"
+        private const val LED_REST_PROTO = "ledrestproto"
         private val HEX = Regex("^[0-9a-f]{6}$")
 
         /** The read-only facts in `dump` order, as the emulator reports them. */
@@ -269,6 +315,7 @@ class EmulatedConsole(facts: Map<String, String> = DEFAULT_FACTS, var lock: Emul
             Tunable("ledtint", "off", Range.Hex(off = true)),
             Tunable("ledfade", "1500", Range.Whole(0, 5000, unit = " ms")),
             Tunable("ledambient", "0", Range.Whole(0, 64)),
+            Tunable("ledrest", "0", Range.Rest),   // M81, firmware 2.1.3: live only, 0 at boot
             Tunable("dimsecs", "60", Range.Whole(0, 3600)),
             Tunable("dimfloor", "0", Range.Whole(0, 255)),
             Tunable("keyviz", "1", Range.Switch),

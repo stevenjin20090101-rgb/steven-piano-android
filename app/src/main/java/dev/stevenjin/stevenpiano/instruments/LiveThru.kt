@@ -45,6 +45,8 @@ data class LiveState(
     val tripped: LiveTrip? = null,
     /** The keyboard is the instrument too: Live stays off, or every key would play twice (or loop). */
     val looped: Boolean = false,
+    /** M81: the Keys tab is on screen with the app in the foreground (Live opens only then); the LED strip's rest follows it. */
+    val onScreen: Boolean = false,
 )
 
 /**
@@ -147,7 +149,7 @@ class LiveThru(
                 },
             )
         }
-        _state.value = LiveState(wanted, open, tripped, looped)
+        _state.value = LiveState(wanted, open, tripped, looped, onScreen)
     }
 
     private fun close(reason: String) {
@@ -237,7 +239,7 @@ class LiveThru(
             LiveTrip.TooManyKeys -> "$MAX_HELD keys held at once"
             LiveTrip.Garbled -> "more than $MAX_MALFORMED_PER_SECOND malformed bytes in a second"
         })
-        _state.value = LiveState(wanted, open, tripped, looped)
+        _state.value = LiveState(wanted, open, tripped, looped, onScreen)
         onTrip(reason)
     }
 

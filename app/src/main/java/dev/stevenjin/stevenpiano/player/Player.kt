@@ -154,6 +154,15 @@ class Player(
      */
     val played: SharedFlow<Played> = _played.asSharedFlow()
 
+    private val _pieceSounding = MutableStateFlow(false)
+
+    /**
+     * M81: a piece sounds now, from the moment it begins to play (its pause before the first note too) until it is over as
+     * [played] says: a pause keeps it sounding; stopped, ended, nothing loaded, or a piece waiting at its start that has not
+     * played since (one piece per Play, Repeat one's piece again) do not. The LED strip's rest follows it.
+     */
+    val pieceSounding: StateFlow<Boolean> = _pieceSounding.asStateFlow()
+
     // Owned by the scope's thread.
     private var queue = Queue.Empty
     private var defaultTempoPct = 100
@@ -896,6 +905,7 @@ class Player(
             _played.tryEmit(Played(current, ended = engine.ended && loaded == current))
         }
         if (sounding == null && engine.status == PlaybackStatus.Playing) sounding = loaded
+        _pieceSounding.value = sounding != null || engine.status == PlaybackStatus.Playing   // M81
     }
 
     /**
