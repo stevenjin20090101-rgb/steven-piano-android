@@ -131,9 +131,11 @@ data class SafetyState(
     val fault: Boolean = false,
     /** v1.40 — M78: Play just refused while cooling down after a fault: the ms left then, on the card for a moment. */
     val cooling: Long? = null,
+    /** v1.47: Play just refused because the power plug can't be trusted: its words, on the card for a moment. */
+    val plug: String? = null,
 ) {
-    /** The full-screen card shows: a check running, one that just ended, Play locked (unless put aside), or refused while cooling. */
-    val card: Boolean get() = running || ended != null || (lock != null && !aside) || cooling != null
+    /** The full-screen card shows: a check running, one that just ended, Play locked (unless put aside), or refused. */
+    val card: Boolean get() = running || ended != null || (lock != null && !aside) || cooling != null || plug != null
 }
 
 /**
@@ -197,6 +199,11 @@ class SafetyRunner(
     private val repowerRestarts: () -> Boolean = { false },
     /** v1.40 — M78: the cool-down after a fault CUT, its ms left; null while none runs (or without the plug). */
     private val cooling: () -> Long? = { null },
+    /**
+     * v1.47 (Steven: "nothing plays if the plug isn't responding, as that's the only fail-safe"): why the power plug can't be
+     * trusted now, in words; null when it can, or with no plug.
+     */
+    private val plugUnsafe: () -> String? = { null },
 ) : StartGate {
     private val _state = MutableStateFlow(SafetyState())
     val state: StateFlow<SafetyState> = _state.asStateFlow()
@@ -252,6 +259,17 @@ class SafetyRunner(
             hold(pieceId, start)
             return false
         }
+        plugUnsafe()?.let { words ->
+            // v1.47: the plug is the only fail-safe: with it stuck or silent nothing plays; the card says why for a moment.
+            _state.update { it.copy(refused = it.refused + 1, aside = false, plug = words) }
+            log("Play refused: $words")
+            coolJob?.cancel()
+            coolJob = scope.launch {
+                delay(UNFINISHED_SHOWN_MS)
+                _state.update { it.copy(plug = null) }
+            }
+            return false
+        }
         cooling()?.let { left ->
             // v1.40 — M78: nothing switches the plug on until the cool-down ends; the card says so for a moment.
             _state.update { it.copy(refused = it.refused + 1, aside = false, cooling = left) }
@@ -289,6 +307,7 @@ class SafetyRunner(
 
     /** Why Play is refused on the web panel now (409 `safety`): the lock's words, or a check due while the app is away; else null. */
     fun refusal(): String? {
+        plugUnsafe()?.let { return it }   // v1.47
         cooling()?.let { return SafetyCopy.cooling(it) }   // v1.40 — M78
         record.lock?.let { return SafetyCopy.locked(it) }
         if (loaded && job == null && record.pending && host.deferral() == Deferral.AWAY) return SafetyCopy.deferral(Deferral.AWAY)
@@ -339,7 +358,7 @@ class SafetyRunner(
         shownJob?.cancel()
         shownJob = null
         coolJob?.cancel()
-        _state.update { it.copy(ended = null, check = if (it.running) it.check else null, cooling = null) }
+        _state.update { it.copy(ended = null, check = if (it.running) it.check else null, cooling = null, plug = null) }
     }
 
     /** v1.40 — M78: the cool-down's ms left, for the card's words (Run the safety check refused while cooling). */

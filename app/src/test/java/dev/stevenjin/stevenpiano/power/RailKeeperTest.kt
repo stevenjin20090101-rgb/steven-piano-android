@@ -719,7 +719,7 @@ class RailKeeperTest {
         assertEquals("CUT a second later", stop.at + RailKeeper.STOP_TO_CUT_MS + RPC_MS, cut.at)
         assertEquals(RailPhase.Off, keeper.phase.value)
         assertEquals(RailMessage.Off, keeper.message.value)
-        advanceTimeBy(RailKeeper.CALM_MS + RailKeeper.WELD_CHECK_MS)
+        advanceTimeBy(RailKeeper.CALM_MS + (RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000))
         assertNull("calm: it goes by itself", keeper.message.value)
         assertFalse("the relay let go", keeper.welded.value)
     }
@@ -745,15 +745,67 @@ class RailKeeperTest {
         upFor(bench, keeper)
         val welded = object : RailPlug by bench.plug {
             override suspend fun status(): PlugStatus = PlugStatus(output = false, watts = IDLE_WATTS)
+
+            override suspend fun reading(): PlugReading = PlugReading(IDLE_WATTS, currentTime)   // still drawing, fresh
         }
         val keeper2 = RailKeeper(backgroundScope, welded, bench::check, MutableStateFlow(true), {}, {}, bench.available, { currentTime })
         keeper2.start()
         keeper2.wanted(RailKeeper.PLAY, true)
         advanceTimeBy(3_000)
         keeper2.wanted(RailKeeper.PLAY, false)
-        advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + RailKeeper.WELD_CHECK_MS + 500)
+        advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + (RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000) + 500)
         assertTrue("the supply still draws after the CUT", keeper2.welded.value)
         assertFalse(keeper.welded.value)
+    }
+
+    @Test
+    fun `a stuck relay stops all play - every want refused, nothing ARMs, until an off advert reads it let go (v1_47)`() = runTest {
+        val bench = Bench(this)
+        var drawing = true   // the supply still drawing after the CUT: a relay stuck closed
+        val plug = object : RailPlug by bench.plug {
+            override suspend fun reading(): PlugReading = PlugReading(if (drawing) IDLE_WATTS else 0.0, currentTime)
+        }
+        val keeper = RailKeeper(backgroundScope, plug, bench::check, MutableStateFlow(true), {}, {}, bench.available, { currentTime }).also { it.start() }
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(3_000)
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000)
+        assertTrue(keeper.welded.value)
+        assertEquals(PlugUnsafe.STUCK, keeper.plugUnsafe())
+        val stuck = currentTime
+        keeper.wanted(RailKeeper.PLAY, true)
+        keeper.keysOnScreen(true)
+        keeper.manual(true)
+        advanceTimeBy(20_000)
+        assertTrue("nothing ARMs", bench.arms(from = stuck).isEmpty())
+        assertEquals(RailMessage.PlugRefused(PlugUnsafe.STUCK), keeper.message.value)
+        assertTrue(keeper.notesHeld.value)
+        // Fixed (or a false alarm): an off advert, the supply drawing nothing well after the CUT.
+        drawing = false
+        keeper.advert(false)
+        advanceTimeBy(1_000)
+        assertFalse("let go after all", keeper.welded.value)
+        assertNull(keeper.plugUnsafe())
+    }
+
+    @Test
+    fun `a stuck relay is two fresh readings well after the CUT - a meter trailing the switch is no verdict (v1_47)`() = runTest {
+        val bench = Bench(this)
+        var cutAt: Long? = null
+        val plug = object : RailPlug by bench.plug {
+            override suspend fun cut(): Boolean = bench.plug.cut().also { cutAt = currentTime }
+
+            // The plug's meter trails its switch: the supply's old draw for 4 s after the CUT, then nothing.
+            override suspend fun reading(): PlugReading =
+                PlugReading(if (cutAt?.let { currentTime - it < 4_000 } != false) IDLE_WATTS else 0.0, currentTime)
+        }
+        val keeper = RailKeeper(backgroundScope, plug, bench::check, MutableStateFlow(true), {}, {}, bench.available, { currentTime }).also { it.start() }
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(3_000)
+        keeper.wanted(RailKeeper.PLAY, false)
+        advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000)
+        assertFalse("not stuck: the 4 s of trailing reading came before the verdict's", keeper.welded.value)
+        assertNull(keeper.plugUnsafe())
     }
 
     @Test
@@ -777,7 +829,7 @@ class RailKeeperTest {
             advanceTimeBy(3_000)
             assertEquals(RailPhase.Up, keeper.phase.value)
             keeper.wanted(RailKeeper.PLAY, false)
-            advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + RailKeeper.WELD_CHECK_MS + 500)
+            advanceTimeBy(RailKeeper.STOP_TO_CUT_MS + (RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000) + 500)
         }
         val keeper = keeper()
         pieceThenCut(keeper)
@@ -990,7 +1042,7 @@ class RailKeeperTest {
         assertEquals(RailMessage.SwitchedOn, keeper.message.value)
         val cut = bench.log.last { it.kind == "CUT" }
         assertTrue("its settings put back first", bench.log.indexOfLast { it.kind == "SETTINGS" } < bench.log.indexOf(cut))
-        advanceTimeBy(RailKeeper.WELD_CHECK_MS + 500)
+        advanceTimeBy((RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000) + 500)
         assertFalse("the weld look after it, as after any CUT", keeper.welded.value)
         keeper.dismissMessage()
 

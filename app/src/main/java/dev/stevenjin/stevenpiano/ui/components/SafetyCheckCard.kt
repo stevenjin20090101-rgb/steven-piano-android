@@ -157,6 +157,7 @@ fun BoxScope.SafetyCheckCard() {
                         Column(Modifier.widthIn(max = CARD_WIDTH).fillMaxWidth()) {
                             val lock = state.lock
                             val cooling = state.cooling
+                            val plug = state.plug
                             when {
                                 lock != null && !state.running -> Locked(
                                     lock = lock,
@@ -169,6 +170,7 @@ fun BoxScope.SafetyCheckCard() {
                                     },
                                     onAside = runner::putAside,
                                 )
+                                plug != null && !state.running && state.ended == null -> PlugRefused(plug, onDismiss = runner::dismiss)   // v1.47
                                 cooling != null && !state.running && state.ended == null -> Cooling(cooling, gate, onDismiss = runner::dismiss)
                                 else -> Checking(state, onDismiss = runner::dismiss)
                             }
@@ -188,6 +190,26 @@ fun BoxScope.SafetyCheckCard() {
         LockedCapsule(onShow = runner::showCard)
     }
     KioskGateSheet(gate)
+}
+
+/**
+ * v1.47 (Steven: the plug is the only fail-safe): Play refused while the power plug may be stuck on, or isn't answering:
+ * the reason and what to do, then OK. Nothing to skip: it clears by itself once the plug can be trusted again.
+ */
+@Composable
+private fun PlugRefused(words: String, onDismiss: () -> Unit) {
+    Text(
+        words,
+        Modifier.semantics {
+            heading()
+            liveRegion = LiveRegionMode.Polite
+        },
+        style = MaterialTheme.typography.headlineMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = TOUCH)) { Text(SafetyCopy.OK) }
+    }
 }
 
 /**

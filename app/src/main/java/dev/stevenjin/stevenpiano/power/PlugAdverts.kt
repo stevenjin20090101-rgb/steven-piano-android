@@ -33,6 +33,10 @@ class PlugAdverts(private val now: () -> Long, private val log: (String) -> Unit
     @Volatile
     private var silentSaid = false
 
+    /** v1.47: when the advert watch began ([now]'s clock), so a plug that never advertised counts as silent from then. */
+    @Volatile
+    private var since: Long? = null
+
     private val _seen = MutableStateFlow<PlugAdvert?>(null)
 
     /** The plug as its last advert said, or null when none came for [SEEN_MS] (or no plug is paired). */
@@ -72,6 +76,9 @@ class PlugAdverts(private val now: () -> Long, private val log: (String) -> Unit
     /** When the latest advert came ([now]'s clock); null before one. */
     fun lastAt(): Long? = last?.at
 
+    /** v1.47: how long the plug has said nothing at [t]: since its last advert, or since the watch began; null with no watch. */
+    fun silentFor(t: Long = now()): Long? = (last?.at ?: since)?.let { t - it }
+
     /** [seen] goes null once no advert came for [SEEN_MS]. */
     fun expire(t: Long = now()) {
         val heard = last
@@ -81,6 +88,7 @@ class PlugAdverts(private val now: () -> Long, private val log: (String) -> Unit
     /** No plug: nothing heard. */
     fun clear() {
         last = null
+        since = null
         _seen.value = null
     }
 
@@ -90,6 +98,7 @@ class PlugAdverts(private val now: () -> Long, private val log: (String) -> Unit
      * [onAdvert]. [seen] expires meanwhile.
      */
     suspend fun run(transport: PlugTransport, address: String, mac: String?, fast: Boolean, onAdvert: (PlugAdvert) -> Unit) = coroutineScope {
+        if (since == null) since = now()
         val ticker = launch {
             while (true) {
                 delay(TICK_MS)

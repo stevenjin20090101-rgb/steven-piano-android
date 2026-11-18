@@ -287,3 +287,15 @@ The Player Piano chat's 2.1.4 (Steven: the release cushion was crashing the keys
 is a plain cut)`. The three stay in the table with `whenListed = true`: `PianoSettings.listed` shows such a row only while the
 piano's dump lists it (an older piano can still turn soft release off), a section left empty shows no eyebrow (Release), and
 `PianoSettings.unlisted` keeps them out of settings search. The emulated piano speaks 2.1.4's.
+
+# v1.47: nothing plays unless the power plug can cut the 24 V
+
+Steven (2026-11-18): "nothing plays if the plug is not responding, as that's the only fail-safe". `RailKeeper.plugUnsafe()`:
+`STUCK` while `welded`, `SILENT` after `PLUG_SILENT_MS` (30 s) without an advert (`RailPlug.silentFor`, from `PlugAdverts`;
+the keeper's own first 30 s are grace). While either holds every want is refused, like the cool-down (`RailMessage.PlugRefused`),
+so nothing ARMs and the notes stay held; `SafetyRunner.admit` refuses Play with `PowerCopy.unsafe` on the card for a moment
+(`SafetyState.plug`), and the panel's refusal says it too. With the rail up, `SILENT_CUT_MS` (20 s) without a reading stops what
+plays and CUTs (`RailMessage.PlugSilent`; no coil fault, so no cool-down). No plug paired: as before. The stuck-relay verdict
+now needs two readings the plug sent at least `WELD_SETTLE_MS` (6 s) after the CUT and `WELD_APART_MS` apart, both above
+`weldedAbove()` (its meter trails the switch, so the old 3 s look could read the draw from before the CUT); an off advert
+reading at or under it well after the CUT clears it.

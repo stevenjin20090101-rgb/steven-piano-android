@@ -80,6 +80,7 @@ internal class SafetyWiring(private val graph: AppGraph, private val app: Applic
             every = { graph.settings.value.safetyCheckEvery },   // v1.39 — M76: off by default
             repowerRestarts = { graph.railPower.available.value },   // v1.39 — M76: the controller is on the plug too
             cooling = graph::coolLeft,   // v1.40 — M78
+            plugUnsafe = { graph.powerWiring.rail.plugUnsafe()?.let(PowerCopy::unsafe) },   // v1.47: the plug, the only fail-safe
         )
     }
 

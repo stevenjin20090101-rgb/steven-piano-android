@@ -53,6 +53,21 @@ interface RailPlug {
      * SwitchBot (v1.36 — M72) keeps none of the tablet's: always false.
      */
     suspend fun putBack(): Boolean? = false
+
+    /**
+     * v1.47: how long the plug has said nothing at [t] (the keeper's clock), ms: since its last advert, or since its advert
+     * watch began when none came yet. Null when the plug isn't watched by its adverts (tests' fakes): never silent then.
+     */
+    fun silentFor(t: Long): Long? = null
+}
+
+/** v1.47 (Steven: "nothing plays if the plug isn't responding, as that's the only fail-safe"): why the plug can't be trusted now. */
+enum class PlugUnsafe {
+    /** Its relay may be stuck closed ([RailKeeper.welded]): a CUT doesn't take, so the tablet can't switch the 24 V off. */
+    STUCK,
+
+    /** No advert for [RailKeeper.PLUG_SILENT_MS]: the tablet can neither read the draw nor be sure a CUT would reach it. */
+    SILENT,
 }
 
 /**
@@ -214,6 +229,15 @@ sealed interface RailMessage {
 
     /** The check after the piece: the piano says [keys] coils are still on (`!active`). */
     data class KeysOn(val keys: Int) : RailMessage
+
+    /**
+     * v1.47: the plug said nothing for [RailKeeper.SILENT_CUT_MS] with the rail up, so the power watches were blind: what played
+     * stopped, CUT (best effort), and nothing plays until it answers again.
+     */
+    data object PlugSilent : RailMessage
+
+    /** v1.47: a want was refused because the plug can't be trusted now ([why]): nothing plays until it can. */
+    data class PlugRefused(val why: PlugUnsafe) : RailMessage
 
     /** Whether it needs attention (amber, until dismissed or the next rail-up) rather than passing by itself. */
     val attention: Boolean get() = this !is Waking && this !is Off
@@ -484,6 +508,7 @@ class RailKeeper(
     /** Starts following the wants (once). */
     fun start() {
         if (loop != null) return
+        startedAt = now()
         if (cool != null) scope.launch { readCool(cool) }
         scope.launch {
             available.collect {
@@ -644,6 +669,18 @@ class RailKeeper(
                 cutsDontTake = false
                 showWelded()
             }
+            if (!on && weldSeen && weldJob?.isActive != true && _armedAt.value == null) {
+                // v1.47: off, and the supply drawing nothing well after the last CUT: the relay let go after all.
+                val t = now()
+                scope.launch {
+                    val reading = plug.reading() ?: return@launch
+                    if (reading.at >= (cutAt ?: 0L) + WELD_SETTLE_MS && reading.at >= t - PlugAdverts.FRESH_MS && reading.watts <= weldedAbove()) {
+                        weldSeen = false
+                        showWelded()
+                        log("Plug: off and drawing ${reading.watts} W well after the CUT: its relay let go after all")
+                    }
+                }
+            }
             return
         }
         val t = now()
@@ -730,6 +767,27 @@ class RailKeeper(
     fun coolLeft(): Long? = _coolUntil.value?.let { it - wall() }?.takeIf { it > 0 }
 
     private fun coolingNow(): Boolean = coolLeft() != null
+
+    /** v1.47: the wants refused while the plug couldn't be trusted, each logged once. */
+    private val unsafeRefused = HashSet<String>()
+
+    /** When the keeper started ([now]'s clock): the plug gets [PLUG_SILENT_MS] from then before it counts as silent. */
+    private var startedAt: Long? = null
+
+    /**
+     * v1.47 (Steven: "nothing plays if the plug isn't responding, as that's the only fail-safe"): why the plug can't be
+     * trusted now, or null when it can (or there is no plug: [available] false, the app as before the plug). Its relay
+     * perhaps stuck closed ([welded]), or no advert for [PLUG_SILENT_MS]. The gate refuses Play with it, and every want is
+     * refused meanwhile, so nothing switches the 24 V on and the notes stay held.
+     */
+    fun plugUnsafe(): PlugUnsafe? {
+        if (!available.value) return null
+        if (_welded.value) return PlugUnsafe.STUCK
+        val t = now()
+        val silent = plug.silentFor(t) ?: return null
+        val since = startedAt?.let { t - it } ?: return null
+        return if (silent > PLUG_SILENT_MS && since > PLUG_SILENT_MS) PlugUnsafe.SILENT else null
+    }
 
     /**
      * Piano › Power plug's **Skip the cool-down** (behind the kiosk PIN, confirmed): it ends now, logged. The safety check
@@ -1325,7 +1383,13 @@ class RailKeeper(
             // No advert since the last reading: nothing new to weigh (only fresh adverts count).
             if (!_readingLost.value && slot - wattsAt > PlugAdverts.SILENT_MS) {
                 _readingLost.value = true
-                log("Power watch: no reading from the plug for ${(slot - wattsAt) / MS_PER_S} s with the rail up; the 24 V stays on, the piano's own checks go on")
+                log("Power watch: no reading from the plug for ${(slot - wattsAt) / MS_PER_S} s with the rail up; looking again")
+            }
+            if (slot - wattsAt > SILENT_CUT_MS) {
+                // v1.47 (Steven): the watches are blind and a CUT may not reach the plug; nothing plays without it.
+                log("Power watch: no reading from the plug for ${(slot - wattsAt) / MS_PER_S} s with the rail up: what plays stops, CUT")
+                fail(RailMessage.PlugSilent)
+                return true
             }
             return false
         }
@@ -1660,15 +1724,21 @@ class RailKeeper(
             cutAt = now()
             _armedAt.value = null
             weldJob?.cancel()
+            val cut = cutAt!!
             weldJob = scope.launch {
-                delay(WELD_CHECK_MS)
-                if (!available.value || _armedAt.value != null) return@launch
-                val status = plug.status() ?: return@launch
-                if (_armedAt.value != null) return@launch
+                // v1.47: the plug's meter trails its switch by seconds, and an advert from before the CUT says nothing about
+                // it; since a stuck relay now stops all play, only two readings the plug sent well after the CUT decide.
                 val above = weldedAbove()
-                weldSeen = (status.watts ?: 0.0) > above
+                val first = readingAfter(cut + WELD_SETTLE_MS) ?: return@launch
+                if (first.watts <= above) {
+                    weldSeen = false
+                    showWelded()
+                    return@launch
+                }
+                val second = readingAfter(first.at + WELD_APART_MS) ?: return@launch
+                weldSeen = second.watts > above
                 showWelded()
-                if (weldSeen) log("After a CUT the supply still draws ${status.watts} W (above $above W): the plug's relay may be stuck")
+                if (weldSeen) log("After a CUT the supply still draws ${second.watts} W (above $above W, twice): the plug's relay may be stuck")
             }
             return true
         }
@@ -1687,6 +1757,20 @@ class RailKeeper(
      * silent ([idleWatts], read at the last rail-up), at least [WELDED_WATTS]; [WELDED_WATTS] before any reading.
      */
     private fun weldedAbove(): Double = maxOf(WELDED_WATTS, (idleWatts ?: 0.0) / 2)
+
+    /**
+     * v1.47: the plug's first reading sent at or after [t] ([now]'s clock), waited for until [WELD_WAIT_MS] past [t]; null
+     * without one, or once the rail was armed again (what it says then isn't about the CUT).
+     */
+    private suspend fun readingAfter(t: Long): PlugReading? {
+        if (now() < t) delay(t - now())
+        while (now() <= t + WELD_WAIT_MS) {
+            if (!available.value || _armedAt.value != null) return null
+            plug.reading()?.takeIf { it.at >= t && it.watts.isFinite() }?.let { return it }
+            delay(AFTER_POLL_MS)
+        }
+        return null
+    }
 
     /** A CHECK, and a second 500 ms later when the first went unanswered: null when neither was (two in a row). */
     private suspend fun checkTwice(): Boards? = check() ?: run {
@@ -1708,6 +1792,13 @@ class RailKeeper(
             if (coolRefused.add(reason)) log("Rail: $reason refused: cooling down after a fault, ${(coolLeft()!! + MINUTE_MS - 1) / MINUTE_MS} min left")
             return false
         }
+        plugUnsafe()?.let { why ->
+            // v1.47 (Steven): the plug is the only fail-safe, so nothing switches it on while it can't be trusted.
+            if (unsafeRefused.add(reason)) log("Rail: $reason refused: the power plug " + if (why == PlugUnsafe.STUCK) "may be stuck on" else "isn't answering")
+            _message.value = RailMessage.PlugRefused(why)
+            return false
+        }
+        unsafeRefused.clear()
         if (reason != GRACE) {
             // v1.39 — M76: something new wants the rail: its end may earn a grace, unless it began within the On hours.
             graceGiven = false
@@ -1861,7 +1952,20 @@ class RailKeeper(
         const val KEYS_IDLE_MS = 10 * 60_000L
         const val GUEST_MAX_MIN = 60
         const val CALM_MS = 4_000L
-        const val WELD_CHECK_MS = 3_000L
+        /**
+         * v1.47: the stuck-relay verdict's readings: the first sent at least [WELD_SETTLE_MS] after the CUT, the second
+         * [WELD_APART_MS] after that, each waited for [WELD_WAIT_MS] at most (none: no verdict).
+         */
+        const val WELD_SETTLE_MS = 6_000L
+        const val WELD_APART_MS = 2_000L
+        const val WELD_WAIT_MS = 8_000L
+
+        /**
+         * v1.47: no advert for this long, the plug isn't answering: Play refused and every want with it. While the rail is
+         * up, [SILENT_CUT_MS] without a reading stops what plays and CUTs.
+         */
+        const val PLUG_SILENT_MS = 30_000L
+        const val SILENT_CUT_MS = 20_000L
 
         /** The plug watch (v1.29 — M66): one look a minute while nothing wants the rail, its settings every 10 minutes. */
         const val WATCH_EVERY_MS = 60_000L

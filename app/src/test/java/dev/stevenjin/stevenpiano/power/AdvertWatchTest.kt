@@ -145,7 +145,7 @@ class AdvertWatchTest {
         keeper.appStarted()
         advanceTimeBy(500)
         assertFalse("CUT at app start", s.plug.output())
-        advanceTimeBy(RailKeeper.WELD_CHECK_MS)   // the weld look after it, over its own connection
+        advanceTimeBy((RailKeeper.WELD_SETTLE_MS + RailKeeper.WELD_APART_MS + 1_000))   // the weld look after it, over its own connection
 
         s.plug.switchOnFromOutside()
         s.client.drop()
@@ -198,7 +198,7 @@ class AdvertWatchTest {
     }
 
     @Test
-    fun `the power watch from adverts - adverts silent for 10 s read as unread, and a coil's 12 W mid-piece is logged, never CUT (v1_39 M76)`() = runTest {
+    fun `adverts silent - 10 s reads as unread, 20 s with the rail up stops and CUTs, and nothing plays until they come back (v1_47)`() = runTest {
         val s = Stack(this, plugOn = false)
         val keeper = s.keeper()
         keeper.wanted(RailKeeper.PLAY, true)
@@ -208,20 +208,34 @@ class AdvertWatchTest {
         assertNull("idle, no key held: nothing", keeper.message.value)
 
         s.advertising = false
-        s.plug.extraWatts = PowerWatch.COIL_WATTS   // a coil on that the music isn't holding, but no advert says so
-        advanceTimeBy(40_000)
-        assertNull("unread: no verdict", keeper.message.value)
-        assertEquals(RailPhase.Up, keeper.phase.value)
-        assertTrue("said once in the log", s.logs.count { "no advert" in it } == 1)
-
+        advanceTimeBy(15_000)
         assertTrue("the power reading lost, said", keeper.readingLost.value)
+        assertEquals("15 s: still up", RailPhase.Up, keeper.phase.value)
+        advanceTimeBy(8_000)
+        assertEquals("over 20 s blind: stopped and CUT (Steven: the plug is the only fail-safe)", RailMessage.PlugSilent, keeper.message.value)
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        assertFalse("CUT", s.plug.output())
+        assertEquals("no coil fault: no check due", 0, s.host.due)
 
+        advanceTimeBy(10_000)
+        assertEquals("30 s without an advert: the plug isn't answering", PlugUnsafe.SILENT, keeper.plugUnsafe())
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(5_000)
+        assertFalse("nothing switches it on", s.plug.output())
+        assertEquals(RailPhase.Off, keeper.phase.value)
+        assertEquals(RailMessage.PlugRefused(PlugUnsafe.SILENT), keeper.message.value)
+
+        // Back: the next Play brings the rail up again, and the floor watch only logs a coil's 12 W mid-piece.
+        keeper.wanted(RailKeeper.PLAY, false)
         s.advertising = true
+        advanceTimeBy(2_000)
+        assertNull(keeper.plugUnsafe())
+        keeper.wanted(RailKeeper.PLAY, true)
+        advanceTimeBy(3_000)
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        s.plug.extraWatts = PowerWatch.COIL_WATTS
         advanceTimeBy(25_000)
-        assertFalse("readings back", keeper.readingLost.value)
-        assertNull("the floor watch logs only since 1.39: no trip", keeper.message.value)
-        assertTrue("not CUT", s.plug.output())
-        assertEquals(0, s.host.due)
+        assertEquals(RailPhase.Up, keeper.phase.value)
         assertTrue(s.logs.any { "log only, no CUT" in it })
     }
 

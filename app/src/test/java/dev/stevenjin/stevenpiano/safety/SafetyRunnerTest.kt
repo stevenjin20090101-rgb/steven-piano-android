@@ -207,6 +207,9 @@ class SafetyRunnerTest {
 
         /** v1.40 — M78: the rail's cool-down after a fault CUT, its ms left (null: none). */
         var coolLeft: Long? = null
+
+        /** v1.47: why the power plug can't be trusted, in words (null: it can). */
+        var plugUnsafe: String? = null
         val runner = SafetyRunner(
             scope = scope.backgroundScope,
             store = store,
@@ -229,6 +232,7 @@ class SafetyRunnerTest {
             heardAll = { heardAll++ },
             every = { every },
             cooling = { coolLeft },
+            plugUnsafe = { plugUnsafe },
         )
 
         fun play(count: Int = 1, id: Long = 1L) = repeat(count) { host.pieces.tryEmit(Played(id, ended = true)) }
@@ -678,6 +682,22 @@ class SafetyRunnerTest {
         settle()
         assertEquals(SafetyOutcome.Unfinished(Why.STOPPED, trip), ended.distinct().single())
         assertTrue("due again", rig.store.record.pending)
+    }
+
+    @Test
+    fun `the power plug stuck or silent - Play refused with its words, the card for a moment, and nothing starts (v1_47)`() = runTest {
+        val rig = started()
+        rig.plugUnsafe = "Nothing plays: the power plug isn't answering"
+        var played = 0
+        assertFalse(rig.runner.admit(3L) { played++ })
+        assertEquals("Nothing plays: the power plug isn't answering", rig.runner.state.value.plug)
+        assertTrue(rig.runner.state.value.card)
+        assertEquals("the panel's refusal too", "Nothing plays: the power plug isn't answering", rig.runner.refusal())
+        advanceTimeBy(SafetyRunner.UNFINISHED_SHOWN_MS + 1_000)
+        assertFalse("the card's moment passed", rig.runner.state.value.card)
+        rig.plugUnsafe = null
+        assertTrue("back: Play goes", rig.runner.admit(3L) { played++ })
+        assertEquals(0, played)   // admit's true means the caller starts it; nothing was held to start
     }
 
     @Test

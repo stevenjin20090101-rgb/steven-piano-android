@@ -16,6 +16,7 @@ import dev.stevenjin.stevenpiano.power.PairStep
 import dev.stevenjin.stevenpiano.power.Peak
 import dev.stevenjin.stevenpiano.power.PlugAdvert
 import dev.stevenjin.stevenpiano.power.PlugSettings
+import dev.stevenjin.stevenpiano.power.PlugUnsafe
 import dev.stevenjin.stevenpiano.power.RailKeeper
 import dev.stevenjin.stevenpiano.power.RailMessage
 import dev.stevenjin.stevenpiano.power.RailPhase
@@ -80,6 +81,20 @@ object PowerCopy {
             "24 V cut: the piano lost contact with a board" + (if (message.afterPiece) " after the piece" else "") + " (I²C errors ${message.before} → ${message.after})"
         is RailMessage.AfterPiece -> "24 V cut: ${message.above} W more than the piano's idle (${message.idle} W) after the piece"
         is RailMessage.KeysOn -> "24 V cut: the piano says ${message.keys} " + (if (message.keys == 1) "key is" else "keys are") + " still on after the piece"
+        RailMessage.PlugSilent -> PLUG_SILENT_CUT
+        is RailMessage.PlugRefused -> unsafe(message.why)
+    }
+
+    /** v1.47: the power plug stopped answering with the 24 V up. */
+    const val PLUG_SILENT_CUT = "The power plug stopped answering — 24 V cut. Nothing plays until it answers again."
+
+    /**
+     * v1.47 (Steven: the plug is the only fail-safe): why nothing plays now, on the safety card, the panel's refusal and the
+     * rail's line.
+     */
+    fun unsafe(why: PlugUnsafe): String = when (why) {
+        PlugUnsafe.STUCK -> "Nothing plays: the power plug may be stuck on, so the tablet can't cut the 24 V. Unplug the supply and check the plug."
+        PlugUnsafe.SILENT -> "Nothing plays: the power plug isn't answering, so the tablet can't cut the 24 V. Check that it's plugged in and near the tablet."
     }
 
     // ---- v1.40 — M78: the cool-down after a fault CUT (its words: SafetyCopy.cooling) -------------------------------------
@@ -180,7 +195,7 @@ object PowerCopy {
     const val FORGET_TEXT =
         "The 24 V goes off now. It stays off until the plug is paired again, or the supply moves to a wall socket."
     const val FORGET_ACTION = "Forget"
-    const val WELDED = "After the 24 V was cut the plug still reads on: its relay may be stuck. Unplug the supply and check the plug."
+    const val WELDED = "After the 24 V was cut the plug still reads on: its relay may be stuck, so nothing plays. Unplug the supply and check the plug."
 
     /** The plug's switch as its adverts say (v1.36 — M72): "On", "Off", or "Not seen" for none in 10 s. */
     fun output(seen: PlugAdvert?): String = when {

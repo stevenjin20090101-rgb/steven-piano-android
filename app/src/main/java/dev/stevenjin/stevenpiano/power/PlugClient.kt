@@ -145,6 +145,9 @@ class SwitchBotRail(private val client: PlugClient, private val adverts: PlugAdv
     /** v1.39 — M76: the latest advert's draw and when it came, no connection made. */
     override suspend fun reading(): PlugReading? = adverts.reading()
 
+    /** v1.47: since its last advert, or since the watch began. */
+    override fun silentFor(t: Long): Long? = adverts.silentFor(t)
+
     /** The SwitchBot keeps no settings of the tablet's: nothing differs, nothing to say (the contract's false). */
     override suspend fun putBack(): Boolean? = false
 }
