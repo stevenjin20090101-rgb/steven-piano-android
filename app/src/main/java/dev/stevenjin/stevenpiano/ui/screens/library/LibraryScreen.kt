@@ -91,6 +91,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtSize
 import dev.stevenjin.stevenpiano.data.db.ArtworkEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
+import dev.stevenjin.stevenpiano.data.sort.PieceSort
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.player.PlaybackStatus
 import dev.stevenjin.stevenpiano.service.ArtworkService
@@ -191,6 +192,8 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
             // The genre chosen last, as stored (never the settings' defaults before they are read), and where a choice goes.
             rememberedScope = graph.settingsRepository.settings.map { it.libraryScope },
             saveScope = graph.settingsRepository::setLibraryScope,
+            pieceSort = graph.settings.map { it.pieceSort }.distinctUntilChanged(),   // M82
+            isDisney = { graph.libraryWiring.disneySongs.isDisney(it) },   // the list is read the first time, off the main thread
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -367,7 +370,8 @@ fun LibraryScreen(playback: PlaybackStarter, onPlaying: () -> Unit, onOpenPiano:
                             }
                             // The Playlists' order is how the person looks at them, not a change to the library: no kiosk PIN.
                             val sortPlaylists: (PlaylistSort) -> Unit = { sort -> graph.appScope.launch { graph.settingsRepository.setPlaylistSort(sort) } }
-                            LibraryItems(state, chosenScope, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, gate, openDialog, banners, sortPlaylists)
+                            val sortPieces: (PieceSort) -> Unit = { sort -> graph.appScope.launch { graph.settingsRepository.setPieceSort(sort) } }   // M82, the same
+                            LibraryItems(state, chosenScope, vm, listState, padding, anchor, actions, play, changePhoto, { key -> gate.run { volumeFor = key } }, gate, openDialog, banners, sortPlaylists, sortPieces)
                         }
                     }
                 }
@@ -508,6 +512,7 @@ private fun LibraryItems(
     onDialog: (LibraryDialog) -> Unit,
     banners: @Composable () -> Unit,
     onSortPlaylists: (PlaylistSort) -> Unit,
+    onSortPieces: (PieceSort) -> Unit,
 ) {
     val columns = LocalAppFrame.current.tileColumns
     val graph = LocalContext.current.graph
@@ -537,6 +542,15 @@ private fun LibraryItems(
     val faded = remember(fade) { Modifier.graphicsLayer { alpha = fade.value } }
     val view = LocalView.current
     val pieces = (listing as? Listing.Pieces)?.pieces.orEmpty()
+    // The piece lists' order (M82): when it changes, the list goes back to its top, where the new order starts (a lazy
+    // list otherwise keeps the row that was first in view); each row's measure is read against the time it was listed.
+    val pieceSort = (listing as? Listing.Pieces)?.sort
+    var sortShown by remember { mutableStateOf(pieceSort) }
+    LaunchedEffect(pieceSort) {
+        if (pieceSort != null && sortShown != null && pieceSort != sortShown) listState.scrollToItem(0)
+        if (pieceSort != null) sortShown = pieceSort
+    }
+    val listedAt = remember(listing) { System.currentTimeMillis() }
     // A built-in playlist's order and pieces are the app's: no handles, no Move or Remove in its rows.
     val builtIn = (listing as? Listing.Pieces)?.playlist?.builtIn == true
     // Reordering needs the whole playlist on screen: not while a search narrows it, nor while kiosk mode
@@ -624,6 +638,16 @@ private fun LibraryItems(
             }
             null -> Unit
         }
+        if (listing is Listing.Pieces && listing.sort != null && shown.isNotEmpty()) {
+            item(key = "pieces-head") {
+                val eyebrow = when (state.category) {
+                    Category.Favorites -> Category.Favorites.label(state.scope)
+                    Category.Disney -> Category.Disney.label(state.scope)
+                    else -> LibraryCopy.PIECES
+                }
+                Box(faded) { PiecesHeader(if (group is Group.Composer) LibraryCopy.PIECES else eyebrow, listing.sort, onSortPieces) }
+            }
+        }
         when (listing) {
             is Listing.Pieces -> itemsIndexed(shown, key = { _, piece -> pieceKey(piece.id) }) { index, piece ->
                 val key = pieceKey(piece.id)
@@ -648,6 +672,7 @@ private fun LibraryItems(
                     } else {
                         null
                     },
+                    measure = listing.sort?.let { LibraryCopy.measure(piece, it, listedAt) },
                 )
             }
             is Listing.Playlists -> {
@@ -818,6 +843,7 @@ private fun EmptyListing(state: LibraryState, query: String) {
         genre != null && state.category == Category.All -> "No $genre pieces yet." to
             if (state.scope == LibraryScope.Modern) "Songs you add that are not classical appear here." else "Steven's library and classical composers appear here."
         state.category == Category.Favorites -> (if (genre != null) "No $genre favorites yet." else "No favorites yet.") to "Long-press a piece to make it a favorite."
+        state.category == Category.Disney -> LibraryCopy.NO_DISNEY to LibraryCopy.NO_DISNEY_LINE
         state.category == Category.Playlists -> (if (genre != null) "No $genre playlists yet." else "No playlists yet.") to "Long-press a piece to add it to a playlist."
         genre != null && state.category == Category.Composers ->
             (if (state.scope == LibraryScope.Modern) "No artists yet." else "No composers yet.") to "Pieces by them appear here."

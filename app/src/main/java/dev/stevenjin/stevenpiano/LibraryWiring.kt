@@ -17,16 +17,23 @@ import dev.stevenjin.stevenpiano.data.LibraryRepository
 import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.art.ArtFiles
 import dev.stevenjin.stevenpiano.data.art.ArtworkRepository
+import dev.stevenjin.stevenpiano.data.art.RequestPacer
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInCatalogue
 import dev.stevenjin.stevenpiano.data.builtin.BuiltInPlaylists
+import dev.stevenjin.stevenpiano.data.builtin.DisneySongs
 import dev.stevenjin.stevenpiano.data.builtin.GenrePlaylists
 import dev.stevenjin.stevenpiano.data.builtin.StudioPlaylist
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
 import dev.stevenjin.stevenpiano.data.imports.ImportSource
 import dev.stevenjin.stevenpiano.data.imports.Importer
+import dev.stevenjin.stevenpiano.data.sort.PacedDeezer
+import dev.stevenjin.stevenpiano.data.sort.Plays
+import dev.stevenjin.stevenpiano.data.sort.StatsBackfill
+import dev.stevenjin.stevenpiano.data.sort.WorldRanks
 import dev.stevenjin.stevenpiano.library.LibraryPack
 import dev.stevenjin.stevenpiano.library.OfferedPacks
 import dev.stevenjin.stevenpiano.net.AppleCatalog
+import dev.stevenjin.stevenpiano.net.Deezer
 import dev.stevenjin.stevenpiano.net.WikipediaClient
 import dev.stevenjin.stevenpiano.service.ArtworkService
 import dev.stevenjin.stevenpiano.service.LibraryService
@@ -36,9 +43,14 @@ import dev.stevenjin.stevenpiano.update.UpdateSource
 import dev.stevenjin.stevenpiano.update.VerifiedDownloader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -47,7 +59,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * The library's part of [AppGraph]: the pieces, the built-in playlists, imports, artwork and Steven's library. The graph
+ * The library's part of [AppGraph]: the pieces, the built-in playlists, imports, artwork, Steven's library, and (M82)
+ * the sorts' measures, world popularity and the Disney section's list. The graph
  * makes it once and everything else reaches it through the graph's members; what it holds is lazy or asked for.
  */
 internal class LibraryWiring(private val graph: AppGraph, private val app: Application) {
@@ -193,7 +206,90 @@ internal class LibraryWiring(private val graph: AppGraph, private val app: Appli
         }
     }
 
+    /** M82: the Disney section's list, read from the app's assets the first time a listing asks (off the main thread). */
+    val disneySongs: DisneySongs by lazy {
+        try {
+            DisneySongs.load(app)
+        } catch (e: Exception) {
+            Log.w(LIBRARY_TAG, "The Disney list couldn't be read", e)
+            DisneySongs.None
+        }
+    }
+
+    /** M82: where the measures' backfill and the world-popularity lookups run, one thing at a time, off the main thread. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val sorting = Dispatchers.IO.limitedParallelism(1)
+
+    /** M82: Deezer's search and albums, two requests a second at most ([WorldRanks.GAP_MS]); `api.deezer.com` only. */
+    private val worldRanks: WorldRanks by lazy {
+        WorldRanks(
+            api = PacedDeezer(Deezer(), RequestPacer(System::currentTimeMillis, WorldRanks.GAP_MS)),
+            store = object : WorldRanks.Store {
+                override suspend fun candidates(after: Long, limit: Int) = library.rankCandidates(after, limit)
+
+                override suspend fun keep(id: Long, rank: Int?, disney: Boolean?, at: Long, key: String) = library.setRank(id, rank, disney, at, key)
+            },
+            online = graph.network::isOnline,
+            clock = System::currentTimeMillis,
+            log = { Log.i(LIBRARY_TAG, it) },
+        )
+    }
+
+    /**
+     * M82, from [AppGraph.start]: the Library's sorts' background work. Plays are counted as the player tells them
+     * ([Plays]: a piece that ended or sounded 30 s). A minute after the start, once, the pieces not measured yet are
+     * ([StatsBackfill]: never while a piece plays or loads); then the world-popularity lookups run whenever the device is
+     * online and the library has settled ([RANKS_SETTLE_MS] after the last change: an import's new pieces), each run
+     * asking only for the pieces not looked up yet.
+     */
+    @OptIn(FlowPreview::class)
+    fun startSorting() {
+        appScope.launch {
+            graph.player.played.collect { played ->
+                if (!Plays.counts(played)) return@collect
+                try {
+                    withContext(Dispatchers.IO) { library.countPlay(played.pieceId) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(LIBRARY_TAG, "A play couldn't be counted", e)
+                }
+            }
+        }
+        appScope.launch(sorting) {
+            delay(BACKFILL_DELAY_MS)
+            val player = graph.player
+            val busy = combine(player.pieceSounding, player.state.map { it.loading }) { sounding, loading -> sounding || loading }
+            val backfill = StatsBackfill(library::statsCandidates, library::measure, library::setStats, busy, log = { Log.i(LIBRARY_TAG, it) })
+            try {
+                backfill.run()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(LIBRARY_TAG, "The measures' backfill stopped; it goes on at the next start", e)
+            }
+            combine(graph.network.online, library.count().distinctUntilChanged()) { online, _ -> online }
+                .debounce(RANKS_SETTLE_MS)
+                .collect { online ->
+                    if (!online) return@collect
+                    try {
+                        worldRanks.run()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(LIBRARY_TAG, "The world-popularity lookups stopped; they go on at the next change", e)
+                    }
+                }
+        }
+    }
+
     private companion object {
         const val LIBRARY_TAG = "Library"
+
+        /** After the start, before the backfill: the app's own start first. */
+        const val BACKFILL_DELAY_MS = 60_000L
+
+        /** After the library or the network last changed, before the lookups run. */
+        const val RANKS_SETTLE_MS = 15_000L
     }
 }

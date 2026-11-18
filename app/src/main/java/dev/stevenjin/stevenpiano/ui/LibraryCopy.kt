@@ -9,14 +9,18 @@
 
 package dev.stevenjin.stevenpiano.ui
 
+import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.data.sort.PieceSort
 import dev.stevenjin.stevenpiano.library.PackState
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * What the app says about Steven's library pack (DESIGN.md › v1.10 — M27): the empty Library's button and
  * its line, the `+` sheet's row, the licence sheet shown before the first load, the Library's progress line
- * and the notification. One line each, in words, sentence case; nothing red.
+ * and the notification. One line each, in words, sentence case; nothing red. And (M82) the piece lists' order: the
+ * header row's words and each row's quiet measure; the Disney section's empty listing.
  */
 object LibraryCopy {
     const val LOAD = "Load Steven's library"
@@ -104,4 +108,65 @@ object LibraryCopy {
     fun loadButton(offer: PackState.Offered?): String = if (offer == null) "Load" else "Load · ${Format.size(offer.sizeBytes)}"
 
     const val NOT_NOW = "Not now"
+
+    // ---- The piece lists' order (M82) ----------------------------------------------------------------
+
+    /** The header row's eyebrow over Pieces, a composer's pieces and a search's results. */
+    const val PIECES = "Pieces"
+
+    /** What TalkBack reads for the sort's pop-up button: "Sort pieces, Hardest". */
+    fun sortDescription(sort: PieceSort): String = "Sort pieces, ${sort.label}"
+
+    /** The Disney section's empty listing: its title and the line under it. */
+    const val NO_DISNEY = "No Disney songs yet."
+    const val NO_DISNEY_LINE = "Songs by Disney's composers, or from a Disney album, appear here."
+
+    /**
+     * A row's one quiet trailing value under [sort] (null under A–Z, and when there is nothing to show): Hardest "18
+     * notes/s · 10 at once", Most keys at once "10 keys at once", Recently played "played 2 days ago" (at [now]), Popular
+     * the plays here, "played 12 times".
+     */
+    fun measure(piece: PieceEntity, sort: PieceSort, now: Long, locale: Locale = Locale.getDefault()): String? = when (sort) {
+        PieceSort.TITLE -> null
+        PieceSort.HARDEST -> {
+            val speed = piece.busiestPerSecond
+            val keys = piece.mostKeys
+            if (speed == null || keys == null || keys == 0) null else "${perSecond(speed, locale)} notes/s · ${Format.count(keys, locale)} at once"
+        }
+        PieceSort.MOST_KEYS -> piece.mostKeys?.takeIf { it > 0 }?.let { Format.count(it, "key at once", "keys at once", locale) }
+        PieceSort.RECENTLY_PLAYED -> piece.lastPlayedAt?.let { playedAgo(now - it, locale) }
+        PieceSort.POPULAR -> when {
+            piece.playCount <= 0 -> null
+            piece.playCount == 1 -> "played once"
+            else -> "played ${Format.count(piece.playCount, locale)} times"
+        }
+    }
+
+    /** Notes a second: whole from 10 up ("18"), one decimal below ("2.4"; "3", not "3.0"). */
+    private fun perSecond(value: Double, locale: Locale): String {
+        if (value >= 10) return Format.count(value.roundToInt(), locale)
+        val tenths = (value * 10).roundToInt()
+        return if (tenths % 10 == 0) "${tenths / 10}" else String.format(locale, "%.1f", tenths / 10.0)
+    }
+
+    /** "played just now", "played 5 min ago", "played an hour ago", "played yesterday", "played 3 days ago", "played 2 months ago". */
+    fun playedAgo(elapsedMs: Long, locale: Locale = Locale.getDefault()): String {
+        val minutes = elapsedMs.coerceAtLeast(0) / MINUTE_MS
+        val hours = minutes / 60
+        val days = hours / 24
+        return "played " + when {
+            minutes < 1 -> "just now"
+            hours < 1 -> "$minutes min ago"
+            hours == 1L -> "an hour ago"
+            days < 1 -> "$hours hours ago"
+            days == 1L -> "yesterday"
+            days < 31 -> "$days days ago"
+            days < 61 -> "a month ago"
+            days < 365 -> "${days / 30} months ago"
+            days < 730 -> "a year ago"
+            else -> "${Format.count((days / 365).toInt(), locale)} years ago"
+        }
+    }
+
+    private const val MINUTE_MS = 60_000L
 }

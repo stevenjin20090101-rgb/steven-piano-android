@@ -109,10 +109,11 @@ class LibraryStatesTest {
 
     @Test
     fun `the genre names the chips, is what the listing is asked for and narrows the channels, and a name's Move follows its pieces`() = runTest {
-        // No second "All" beside the switch's; the composers are artists under Modern only. Playlists first (v1.37 — M73).
-        assertEquals(listOf("Playlists", "Pieces", "Composers", "Favorites", "Recent"), Category.entries.map { it.label(LibraryScope.All) })
+        // No second "All" beside the switch's; the composers are artists under Modern only. Playlists first (v1.37 — M73);
+        // Disney between Favorites and Recent (M82).
+        assertEquals(listOf("Playlists", "Pieces", "Composers", "Favorites", "Disney", "Recent"), Category.entries.map { it.label(LibraryScope.All) })
         assertEquals("Composers", Category.Composers.label(LibraryScope.Classical))
-        assertEquals(listOf("Playlists", "Pieces", "Artists", "Favorites", "Recent"), Category.entries.map { it.label(LibraryScope.Modern) })
+        assertEquals(listOf("Playlists", "Pieces", "Artists", "Favorites", "Disney", "Recent"), Category.entries.map { it.label(LibraryScope.Modern) })
         assertEquals("the Library opens on Playlists", Category.Playlists, LibraryState().category)
 
         val asked = mutableListOf<LibraryScope>()

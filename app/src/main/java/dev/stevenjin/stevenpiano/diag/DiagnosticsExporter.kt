@@ -231,6 +231,7 @@ object DiagnosticsText {
         line("libraryPackVersion", s.libraryPackVersion)
         // The Playlists listing's order (v1.10.1 — M28): a preference, so it is here; the repair of older uploads is not.
         line("playlistSort", s.playlistSort)
+        line("pieceSort", s.pieceSort)
         line("libraryScope", s.libraryScope)
         // Keyboards and instruments (v1.11 — M29): the keyboard and the MIDI piano chosen, as the piano's address is.
         line("keyboardId", s.keyboardId)
