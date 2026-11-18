@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.data.PieceFiles
 import dev.stevenjin.stevenpiano.data.TextLimits
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.named
+import dev.stevenjin.stevenpiano.data.sort.PieceStats
 import dev.stevenjin.stevenpiano.midi.SmfException
 import dev.stevenjin.stevenpiano.midi.SmfParser
 import kotlinx.coroutines.CancellationException
@@ -354,6 +355,7 @@ class Importer(
             return Outcome.Failed
         }
         val meta = names.metadata(item, row, midi.sequenceNames)
+        val stats = PieceStats.of(midi.notes)   // M82: what the Library's sorts read, from the notes just parsed
         val unnamed = PieceEntity(
             title = meta.title,
             composer = "",
@@ -369,6 +371,11 @@ class Importer(
             addedAt = clock(),
             searchText = "",
             titleKey = "",
+            busiestPerSecond = stats.busiestPerSecond,
+            mostKeys = stats.mostKeys,
+            mostKeysMoments = stats.mostKeysMoments,
+            leapsPerSecond = stats.leapsPerSecond,
+            keyRange = stats.keyRange,
         )
         replace(row, unnamed)?.let { return it }   // v1.41: a new version of a piece already there
         val piece = unnamed.named(meta.title, names.composer(meta))   // named() cuts the title
@@ -377,8 +384,8 @@ class Importer(
 
     /**
      * v1.41: when [row] names earlier versions of this file (`replaces`), the first added of those the library holds
-     * takes it in place ([ImportStore.replaceFile]): [file]'s SHA-256, file name, source, size, length and note count
-     * over the old version's, and nothing else, so its id stays and with it its favorite, plays, names, genre, covers
+     * takes it in place ([ImportStore.replaceFile]): [file]'s SHA-256, file name, source, size, length, note count and
+     * measures (M82) over the old version's, and nothing else, so its id stays and with it its favorite, plays, names, genre, covers
      * and playlists; it joins the row's collection, and its old file goes once the library has the new one. Null when
      * the library holds none of them, or refused (the piece went meanwhile): [file] is then a new piece, as before.
      */
@@ -391,6 +398,11 @@ class Importer(
             sizeBytes = file.sizeBytes,
             durationMs = file.durationMs,
             noteCount = file.noteCount,
+            busiestPerSecond = file.busiestPerSecond,
+            mostKeys = file.mostKeys,
+            mostKeysMoments = file.mostKeysMoments,
+            leapsPerSecond = file.leapsPerSecond,
+            keyRange = file.keyRange,
         )
         if (!store.replaceFile(piece, file.collection)) return null
         if (earlier.fileName != file.fileName) files.delete(earlier.fileName)

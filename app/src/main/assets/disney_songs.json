@@ -1,0 +1,49 @@
+{
+  "about": "Steven Piano's Disney section (M82): which songs are Disney's, besides those whose album Deezer says is on a Disney label. Each matcher is a rule; a song is Disney when one accepts it. names: the song's composer or artist holds one of these as words in a row (folded, punctuation dropped: 'Kristen Anderson-Lopez' is 'kristen anderson lopez'). artists: the composer or artist is exactly one of these (a film's name, as song files often give it). title: a case-insensitive regular expression found in the title as words (folded, punctuation dropped: 'You're Welcome' is 'you re welcome'). A matcher with names or artists and a title needs both; a title alone stands for any composer, so it must be a title no other well-known song has. Titles only: no lyrics, no music.",
+  "matchers": [
+    {
+      "names": ["disney", "pixar", "alan menken", "menken", "howard ashman", "frank churchill", "sherman brothers", "richard m sherman", "robert b sherman", "richard sherman", "robert sherman", "robert lopez", "kristen anderson lopez", "anderson lopez", "randy newman"]
+    },
+    {
+      "artists": ["frozen", "frozen ii", "frozen 2", "moana", "moana 2", "encanto", "the lion king", "lion king", "aladdin", "coco", "tangled", "the little mermaid", "little mermaid", "beauty and the beast", "mulan", "pocahontas", "hercules", "tarzan", "zootopia", "toy story", "mary poppins", "the jungle book", "jungle book", "the princess and the frog", "lilo stitch", "lilo and stitch", "cinderella", "snow white", "sleeping beauty", "peter pan", "bambi", "dumbo", "pinocchio", "ratatouille", "finding nemo", "monsters inc", "the incredibles", "wreck it ralph", "big hero 6", "raya and the last dragon"]
+    },
+    {
+      "names": ["elton john", "tim rice"],
+      "title": "\\b(?:circle of life|can you feel the love tonight|i just can t wait to be king|hakuna matata|be prepared|a whole new world)\\b"
+    },
+    {
+      "names": ["phil collins"],
+      "title": "\\b(?:you ll be in my heart|two worlds|strangers like me|son of man|trashin the camp)\\b"
+    },
+    {
+      "names": ["lin manuel miranda", "auli i cravalho", "dwayne johnson", "jessica darrow", "stephanie beatriz", "carolina gaitan", "mauro castillo", "sebastian yatra"],
+      "title": "\\b(?:how far i ll go|you re welcome|we know the way|shiny|where you are|i am moana|we don t talk about bruno|surface pressure|waiting on a miracle|the family madrigal|dos oruguitas|what else can i do|all of you|colombia mi encanto)\\b"
+    },
+    {
+      "names": ["idina menzel", "demi lovato", "kristen bell", "josh gad", "jonathan groff", "aurora"],
+      "title": "\\b(?:let it go|into the unknown|show yourself|lost in the woods|for the first time in forever|love is an open door|do you want to build a snowman)\\b"
+    },
+    {
+      "names": ["miguel", "anthony gonzalez", "benjamin bratt", "gael garcia bernal", "natalia lafourcade"],
+      "title": "\\b(?:remember me|un poco loco)\\b"
+    },
+    {
+      "title": "\\b(?:do you want to build a snowman|for the first time in forever|love is an open door|into the unknown|show yourself|lost in the woods|some things never change|when i am older)\\b"
+    },
+    {
+      "title": "\\b(?:a whole new world|friend like me|prince ali|one jump ahead|part of your world|under the sea|kiss the girl|poor unfortunate souls|be our guest|tale as old as time|something there|circle of life|can you feel the love tonight|hakuna matata|i just can t wait to be king|colors of the wind|just around the riverbend|i ll make a man out of you|go the distance|zero to hero|i won t say i m in love|god help the outcasts|the bells of notre dame|you ll be in my heart)\\b"
+    },
+    {
+      "title": "\\b(?:how far i ll go|we know the way|i am moana|we don t talk about bruno|surface pressure|dos oruguitas|the family madrigal|waiting on a miracle|un poco loco|you ve got a friend in me|when she loved me|i see the light|when will my life begin|he s a pirate|married life)\\b"
+    },
+    {
+      "title": "\\b(?:when you wish upon a star|heigh ho|whistle while you work|someday my prince will come|bibbidi bobbidi boo|a dream is a wish your heart makes|once upon a dream|the bare necessities|i wan na be like you|i wanna be like you|supercalifragilisticexpialidocious|chim chim cher ee|a spoonful of sugar|feed the birds|it s a small world|zip a dee doo dah|everybody wants to be a cat|you can fly|cruella de vil|true love s kiss|mickey mouse march)\\b"
+    },
+    {
+      "title": "^beauty and the beast\\b"
+    },
+    {
+      "title": "\\bfrom (?:disney s )?(?:frozen|frozen ii|frozen 2|moana|encanto|the lion king|aladdin|coco|tangled|the little mermaid|beauty and the beast|mulan|pocahontas|hercules|tarzan|zootopia|toy story|ratatouille|inside out|the incredibles|finding nemo|monsters inc|wall e|lilo and stitch|lilo stitch|mary poppins|the jungle book|cinderella|snow white|sleeping beauty|peter pan|bambi|dumbo|pinocchio|the princess and the frog|wreck it ralph|big hero 6|raya and the last dragon)\\b"
+    }
+  ]
+}

@@ -15,7 +15,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 /**
- * The library. Schema v7 (app 1.37 — M73): a piece keeps its genre as Apple's catalogue names it, `pieces.appleGenre`,
+ * The library. Schema v8 (M82): a piece keeps the measures the Library's sorts read (from its notes, and its world
+ * popularity, its album's label for the Disney section), nine nullable columns added by [MIGRATION_7_8]. Schema v7 (app 1.37 — M73): a piece keeps its genre as Apple's catalogue names it, `pieces.appleGenre`,
  * and the upgrade deletes the imported playlists Pop and MIDI once ([MIGRATION_6_7]). Schema v6 (app 1.24 — M57): the schedules table holds the quiet times alone, without the timed plays'
  * columns. Schema v5 (app 1.14 — M37): every piece has a genre, `pieces.genre`. Schema v4 (app 1.12 — M30):
  * Studio's history has its table, `studio_generations`. Schema v3 (app 1.5): the built-in playlists are marked in
@@ -23,13 +24,13 @@ import androidx.room.RoomDatabase
  * table). A v1 database (app 1.1) is migrated by [MIGRATION_1_2], [MIGRATION_2_3], [MIGRATION_3_4], [MIGRATION_4_5]
  * and [MIGRATION_5_6] in turn, a v2 one (apps 1.2 to 1.4) from [MIGRATION_2_3], a v3 one (apps 1.5 to 1.11) from
  * [MIGRATION_3_4], a v4 one (apps 1.12 to 1.13.1) from [MIGRATION_4_5], a v5 one (apps 1.14 to 1.23) by
- * [MIGRATION_5_6], a v6 one (apps 1.24 to 1.36) by [MIGRATION_6_7]; there is deliberately no destructive fallback, so a migration problem fails loudly instead of
+ * [MIGRATION_5_6], a v6 one (apps 1.24 to 1.36) by [MIGRATION_6_7], a v7 one (apps 1.37 to 1.46) by [MIGRATION_7_8]; there is deliberately no destructive fallback, so a migration problem fails loudly instead of
  * wiping the library.
  */
 @Database(
     entities = [PieceEntity::class, PlaylistEntity::class, PlaylistPieceEntity::class, ArtworkEntity::class, QuietEntity::class, GenerationEntity::class],
     views = [ComposerGroup::class],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class PianoDatabase : RoomDatabase() {
@@ -46,7 +47,7 @@ abstract class PianoDatabase : RoomDatabase() {
     companion object {
         fun open(context: Context): PianoDatabase =
             Room.databaseBuilder(context, PianoDatabase::class.java, "steven-piano.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
     }
 }

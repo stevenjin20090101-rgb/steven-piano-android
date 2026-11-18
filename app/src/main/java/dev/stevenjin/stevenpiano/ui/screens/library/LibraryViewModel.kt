@@ -28,6 +28,8 @@ import dev.stevenjin.stevenpiano.data.db.ComposerGroup
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
 import dev.stevenjin.stevenpiano.data.imports.ImportProgress
+import dev.stevenjin.stevenpiano.data.sort.PieceOrder
+import dev.stevenjin.stevenpiano.data.sort.PieceSort
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,12 +51,16 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** The chips, Synthesia-style; Playlists first, where the Library opens (v1.37 — M73), then the rest as before. */
+/**
+ * The chips, Synthesia-style; Playlists first, where the Library opens (v1.37 — M73), then the rest as before, and Disney
+ * (M82: every Disney song, `data.builtin.DisneySongs`) between Favorites and Recent.
+ */
 enum class Category(private val word: String) {
     Playlists("Playlists"),
     All("Pieces"),
     Composers("Composers"),
     Favorites("Favorites"),
+    Disney("Disney"),
     Recent("Recent"),
     ;
 
@@ -86,8 +92,12 @@ sealed interface Group {
 sealed interface Listing {
     val isEmpty: Boolean
 
-    /** Pieces; inside a playlist, [playlist] is the whole playlist's name, size and length, whatever the search shows. */
-    data class Pieces(val pieces: List<PieceEntity>, val playlist: PlaylistSummary? = null) : Listing {
+    /**
+     * Pieces; inside a playlist, [playlist] is the whole playlist's name, size and length, whatever the search shows. [sort]
+     * is the order they are in when the person chooses it (M82: Pieces, Favorites, Disney, a composer's, a search's); null
+     * for a list with an order of its own (a playlist, Recent).
+     */
+    data class Pieces(val pieces: List<PieceEntity>, val playlist: PlaylistSummary? = null, val sort: PieceSort? = null) : Listing {
         override val isEmpty: Boolean get() = pieces.isEmpty()
     }
 
@@ -182,6 +192,10 @@ class LibraryViewModel(
     private val builtInOrder: () -> List<String> = { emptyList() },
     rememberedScope: Flow<LibraryScope> = flowOf(LibraryScope.All),
     private val saveScope: suspend (LibraryScope) -> Unit = {},
+    /** The piece lists' order (M82), as stored. */
+    private val pieceSort: Flow<PieceSort> = flowOf(PieceSort.TITLE),
+    /** Whether a piece is one of Disney's (M82: the Disney chip); called off the main thread. */
+    private val isDisney: (PieceEntity) -> Boolean = { false },
 ) : ViewModel() {
     /** Null until the genre remembered has been read: nothing is listed before, so the genre never changes as the tab opens. */
     private val selection = MutableStateFlow<Selection?>(null)
@@ -327,11 +341,12 @@ class LibraryViewModel(
             is Group.Playlist -> combine(library.inPlaylist(group.id), library.playlists()) { pieces, all ->
                 Listing.Pieces(pieces.matching(key), all.firstOrNull { it.id == group.id })
             }
-            is Group.Composer -> library.byComposer(group.key, scope).map { Listing.Pieces(it.matching(key)) }
+            is Group.Composer -> sorted(library.byComposer(group.key, scope).map { it.matching(key) })
             Group.Channels -> channels.map { all -> Listing.Channels(GenreListing.channels(all.orEmpty(), scope).filter { key in TextKeys.fold(it.name) }) }
             null -> when (sel.category) {
-                Category.All -> (if (key.isEmpty()) library.all(scope) else library.search(query, scope)).map { Listing.Pieces(it) }
-                Category.Favorites -> library.favorites(scope).map { Listing.Pieces(it.matching(key)) }
+                Category.All -> sorted(if (key.isEmpty()) library.all(scope) else library.search(query, scope))
+                Category.Favorites -> sorted(library.favorites(scope).map { it.matching(key) })
+                Category.Disney -> sorted(library.all(scope).map { all -> all.filter { isDisney(it) && (key.isEmpty() || key in it.searchText) } })
                 Category.Recent -> library.recent(scope).map { Listing.Pieces(it.matching(key)) }
                 // The channels' row stands under the playlists (v1.37 — M73); a search narrows the playlists alone. Their order is the
                 // person's choice (v1.10.1 — M28, D6); the built-in lists' order is read off the main thread.
@@ -351,6 +366,20 @@ class LibraryViewModel(
     }
 
     private fun List<PieceEntity>.matching(key: String): List<PieceEntity> = if (key.isEmpty()) this else filter { key in it.searchText }
+
+    /**
+     * [pieces] (by title) in the order chosen (M82, [PieceOrder]), off the main thread; Hardest and Popular with every
+     * piece's measures beside them, as they rank a piece against the whole library.
+     */
+    private fun sorted(pieces: Flow<List<PieceEntity>>): Flow<Listing> =
+        pieceSort.distinctUntilChanged().flatMapLatest { sort ->
+            val ordered = if (sort.ranksLibrary) {
+                combine(pieces, library.measures()) { list, all -> PieceOrder.sorted(list, sort, all) }
+            } else {
+                pieces.map { PieceOrder.sorted(it, sort) }
+            }
+            ordered.map<List<PieceEntity>, Listing> { Listing.Pieces(it, sort = sort) }
+        }.flowOn(Dispatchers.Default)
 
     /** A read that fails ends as an empty list, logged, rather than an exception in a dialog. */
     private fun <T> Flow<List<T>>.orNone(): Flow<List<T>> = catch { e ->

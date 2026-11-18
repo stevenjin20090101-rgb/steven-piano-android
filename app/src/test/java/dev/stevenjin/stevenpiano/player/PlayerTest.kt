@@ -570,7 +570,7 @@ class PlayerTest {
         source.pieces[3] = piece(64, 5_000)
         onMain { player.play(1, listOf(1, 2, 3)) }
         withTimeout(5_000) { while (heard.isEmpty()) delay(10) }
-        assertEquals(listOf(Played(1, ended = true)), heard.toList())
+        assertEquals(listOf(Played(1, ended = true)), heard.map { it.copy(soundedMs = 0) })
         withTimeout(5_000) { player.state.first { it.piece?.pieceId == 2L && !it.loading } }
         delay(200)
         assertEquals("loaded and waiting is not sounding", 1, heard.size)
@@ -583,12 +583,34 @@ class PlayerTest {
         onMain { player.next() }
         withTimeout(5_000) { player.state.first { it.piece?.pieceId == 3L && it.status == PlaybackStatus.Playing } }
         withTimeout(2_000) { while (heard.size < 2) delay(10) }
-        assertEquals(Played(2, ended = false), heard[1])
+        assertEquals(Played(2, ended = false), heard[1].copy(soundedMs = 0))
         onMain { player.stop() }
         withTimeout(2_000) { while (heard.size < 3) delay(10) }
-        assertEquals(Played(3, ended = false), heard[2])
+        assertEquals(Played(3, ended = false), heard[2].copy(soundedMs = 0))
         delay(200)
         assertEquals("each once", 3, heard.size)
+        listening.cancel()
+    }
+
+    @Test
+    fun `a piece that sounded is told with how long it played, its pause left out (M82)`() = runBlocking {
+        val heard = CopyOnWriteArrayList<Played>()
+        val listening = scope.launch { player.played.collect { heard += it } }
+        source.pieces[1] = piece(60, 10_000)
+        onMain { player.play(1) }
+        withTimeout(5_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        delay(300)
+        onMain { player.pause() }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Paused } }
+        delay(600)
+        onMain { player.resume() }
+        withTimeout(2_000) { player.state.first { it.status == PlaybackStatus.Playing } }
+        delay(300)
+        onMain { player.stop() }
+        withTimeout(2_000) { while (heard.isEmpty()) delay(10) }
+        val played = heard.single()
+        assertFalse(played.ended)
+        assertTrue("about 0.6 s, not the 1.2 s with the pause: ${played.soundedMs} ms", played.soundedMs in 450L..1_100L)
         listening.cancel()
     }
 

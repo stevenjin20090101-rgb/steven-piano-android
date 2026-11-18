@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,7 +55,8 @@ import dev.stevenjin.stevenpiano.ui.components.pressScale
  * A piece: its 40 dp art ([PieceArt], v1.15 — M40: its own cover, an album cover or one drawn or chosen,
  * else its composer's portrait, else its own roll card), then the title over "Surname · m:ss". Tap
  * plays; long-press opens its menu ([PieceMenu] with [actions]; [place] offers Move up and Move down
- * inside a reorderable playlist). [trailing] is the drag handle inside a playlist.
+ * inside a reorderable playlist). [trailing] is the drag handle inside a playlist. [measure] (M82) is the list order's
+ * one quiet value at the row's end ("18 notes/s · 10 at once"), when it has one.
  */
 @Composable
 fun PieceRow(
@@ -64,10 +66,12 @@ fun PieceRow(
     modifier: Modifier = Modifier,
     place: RowPlace? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
+    measure: String? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     Box(modifier) {
         TextRow(
+            measure = measure,
             title = piece.title,
             meta = listOf(piece.composerShort, Format.clockMillis(piece.durationMs)).filter { it.isNotBlank() }.joinToString(" · "),
             onClickLabel = "Play",
@@ -226,7 +230,8 @@ private fun Tile(
 
 /**
  * The library's row: [leading] art, then the text, 56 dp or more, a hairline divider inset to the
- * text; [trailing] holds a row's glyphs.
+ * text; [measure] (M82), one quiet value at the end of the row's text, in the eyebrow's grey; [trailing] holds a row's
+ * glyphs.
  */
 @Composable
 private fun TextRow(
@@ -237,6 +242,7 @@ private fun TextRow(
     onLongClick: (() -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
+    measure: String? = null,
 ) {
     Column {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -268,6 +274,10 @@ private fun TextRow(
                     )
                     if (meta.isNotEmpty()) Eyebrow(meta, color = MaterialTheme.colorScheme.onSurfaceVariant, uppercase = false, maxLines = 1)
                 }
+                if (measure != null) {
+                    Spacer(Modifier.width(MEASURE_GAP))
+                    Eyebrow(measure, Modifier.widthIn(max = MEASURE_MAX), uppercase = false, maxLines = 1)
+                }
             }
             trailing?.invoke(this)
         }
@@ -277,5 +287,9 @@ private fun TextRow(
 
 /** The art beside a piece row. */
 private val PORTRAIT: Dp = 40.dp
+private val MEASURE_GAP: Dp = 12.dp
+
+/** A measure never takes more of a phone's row than this; the title keeps the rest. */
+private val MEASURE_MAX: Dp = 168.dp
 private val LEADING_GAP: Dp = 16.dp
 private val TEXT_INSET_WITH_ART: Dp = 16.dp + PORTRAIT + LEADING_GAP

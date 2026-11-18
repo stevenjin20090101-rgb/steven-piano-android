@@ -21,17 +21,21 @@ import dev.stevenjin.stevenpiano.data.db.CoverCount
 import dev.stevenjin.stevenpiano.data.db.PianoDatabase
 import dev.stevenjin.stevenpiano.data.db.PieceEntity
 import dev.stevenjin.stevenpiano.data.db.PieceHead
+import dev.stevenjin.stevenpiano.data.db.PieceMeasure
 import dev.stevenjin.stevenpiano.data.db.PiecePosition
 import dev.stevenjin.stevenpiano.data.db.PieceSummary
 import dev.stevenjin.stevenpiano.data.db.PlaylistEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistPieceEntity
 import dev.stevenjin.stevenpiano.data.db.PlaylistRef
 import dev.stevenjin.stevenpiano.data.db.PlaylistSummary
+import dev.stevenjin.stevenpiano.data.db.RankCandidate
+import dev.stevenjin.stevenpiano.data.db.StatsCandidate
 import dev.stevenjin.stevenpiano.data.db.named
 import dev.stevenjin.stevenpiano.data.imports.ComposerNames
 import dev.stevenjin.stevenpiano.data.imports.ImportBatch
 import dev.stevenjin.stevenpiano.data.imports.ImportStore
 import dev.stevenjin.stevenpiano.data.imports.ImportedPlaylist
+import dev.stevenjin.stevenpiano.data.sort.PieceStats
 import dev.stevenjin.stevenpiano.midi.SmfParser
 import dev.stevenjin.stevenpiano.player.PieceSource
 import dev.stevenjin.stevenpiano.player.PlayablePiece
@@ -392,7 +396,35 @@ class LibraryRepository(
         return PlayablePiece(piece.id, piece.title, piece.composer, midi, piece.composerKey)
     }
 
+    /** The piece started now: Recent and Recently played (M82: a start is no play counted; [countPlay] is). */
     override suspend fun markPlayed(pieceId: Long) = pieces.markPlayed(pieceId, clock())
+
+    /** M82: the piece played ([dev.stevenjin.stevenpiano.data.sort.Plays]: to its end, or 30 s of it). */
+    suspend fun countPlay(pieceId: Long) = pieces.countPlay(pieceId)
+
+    /** M82: every piece's measures, for Hardest and Popular, which rank a piece against the whole library. */
+    fun measures(): Flow<List<PieceMeasure>> = pieces.measures()
+
+    /** M82: the first [limit] pieces still to be measured (the backfill's). */
+    suspend fun statsCandidates(limit: Int): List<StatsCandidate> = pieces.statsCandidates(limit)
+
+    /** M82: piece [candidate]'s measures, from its file read and parsed now. Throws when it can't be read. */
+    suspend fun measure(candidate: StatsCandidate): PieceStats {
+        val bytes = withContext(io) { files.read(candidate.fileName) }
+        return PieceStats.of(SmfParser.parse(bytes).notes)
+    }
+
+    /** M82: keeps piece [id]'s measures. */
+    suspend fun setStats(id: Long, stats: PieceStats) =
+        pieces.setStats(id, stats.busiestPerSecond, stats.mostKeys, stats.mostKeysMoments, stats.leapsPerSecond, stats.keyRange)
+
+    /** M82: the pieces whose world popularity is due, after [after] by id. */
+    suspend fun rankCandidates(after: Long, limit: Int): List<RankCandidate> = pieces.rankCandidates(after, limit)
+
+    /** M82: the world-popularity lookup's answer for piece [id], unless it was renamed from [key] meanwhile. */
+    suspend fun setRank(id: Long, rank: Int?, disney: Boolean?, at: Long, key: String) {
+        pieces.setRank(id, rank, disney, at, key)
+    }
 
     override suspend fun findBySha(sha256: String): PieceEntity? = pieces.bySha(sha256)
 
@@ -438,8 +470,17 @@ class LibraryRepository(
      */
     override suspend fun replaceFile(piece: PieceEntity, collection: String?): Boolean = db.withTransaction {
         val written = pieces.replaceFile(piece.id, piece.sha256, piece.fileName, piece.sourceName, piece.sizeBytes, piece.durationMs, piece.noteCount) > 0
-        if (written) collection?.let { name -> link(playlistId(name, imported = true), piece.id) }
+        if (written) {
+            // M82: the new file's measures, as the import worked them out (or none: the backfill then measures it).
+            val stats = piece.stats()
+            if (stats != null) setStats(piece.id, stats) else pieces.setStats(piece.id, null, null, null, null, null)
+            collection?.let { name -> link(playlistId(name, imported = true), piece.id) }
+        }
         written
+    }
+
+    private fun PieceEntity.stats(): PieceStats? {
+        return PieceStats(busiestPerSecond ?: return null, mostKeys ?: return null, mostKeysMoments ?: return null, leapsPerSecond ?: return null, keyRange ?: return null)
     }
 
     override suspend fun insertAll(pieces: List<PieceEntity>): Int = db.withTransaction {

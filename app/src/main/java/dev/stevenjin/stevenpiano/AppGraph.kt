@@ -719,6 +719,7 @@ class AppGraph(private val app: Application) {
                 }
             }
         }
+        libraryWiring.startSorting()   // M82, last: plays counted, the sorts' measures and world popularity in the background
     }
 
     /**

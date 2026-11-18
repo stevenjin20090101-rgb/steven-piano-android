@@ -25,6 +25,7 @@ import dev.stevenjin.stevenpiano.audio.Sampler
 import dev.stevenjin.stevenpiano.audio.TabletSoundMode
 import dev.stevenjin.stevenpiano.data.LibraryScope
 import dev.stevenjin.stevenpiano.data.PlaylistSort
+import dev.stevenjin.stevenpiano.data.sort.PieceSort
 import dev.stevenjin.stevenpiano.midi.KeyMap
 import dev.stevenjin.stevenpiano.piano.LedColourSource
 import dev.stevenjin.stevenpiano.piano.LedRestChoice
@@ -199,6 +200,8 @@ data class PianoSettings(
     val libraryPackVersion: Int = 0,
     /** The Playlists listing's order (v1.10.1 — M28, D6): newest first, or by name as before. */
     val playlistSort: PlaylistSort = PlaylistSort.NEWEST,
+    /** The piece lists' order (M82): A–Z, Popular, Hardest, Most keys at once or Recently played. */
+    val pieceSort: PieceSort = PieceSort.TITLE,
     /** The Library's genre (v1.14 — M37): All the first time, then the one chosen last, across restarts. */
     val libraryScope: LibraryScope = LibraryScope.All,
     /**
@@ -497,6 +500,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     /** The Playlists listing's order (v1.10.1 — M28). */
     suspend fun setPlaylistSort(sort: PlaylistSort) = edit { it[PLAYLIST_SORT] = sort.name }
 
+    /** The piece lists' order (M82). */
+    suspend fun setPieceSort(sort: PieceSort) = edit { it[PIECE_SORT] = sort.name }
+
     /** The Library's genre, All, Classical or Modern (v1.14 — M37). */
     suspend fun setLibraryScope(scope: LibraryScope) = edit { it[LIBRARY_SCOPE] = scope.name }
 
@@ -627,6 +633,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             cloudPianoName = this[CLOUD_PIANO_ID]?.let { this[CLOUD_PIANO_NAME] },
             libraryPackVersion = (this[LIBRARY_PACK_VERSION] ?: defaults.libraryPackVersion).coerceAtLeast(0),
             playlistSort = PlaylistSort.entries.firstOrNull { it.name == this[PLAYLIST_SORT] } ?: defaults.playlistSort,
+            pieceSort = PieceSort.entries.firstOrNull { it.name == this[PIECE_SORT] } ?: defaults.pieceSort,
             libraryScope = LibraryScope.entries.firstOrNull { it.name == this[LIBRARY_SCOPE] } ?: defaults.libraryScope,
             keyboardId = this[KEYBOARD_ID],
             keyboardName = this[KEYBOARD_ID]?.let { this[KEYBOARD_NAME] },
@@ -713,6 +720,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         const val MAX_PIANO_NAME = 60
         val LIBRARY_PACK_VERSION = intPreferencesKey("libraryPackVersion")
         val PLAYLIST_SORT = stringPreferencesKey("playlistSort")
+        val PIECE_SORT = stringPreferencesKey("pieceSort")
         val LIBRARY_SCOPE = stringPreferencesKey("libraryScope")
         val KEYBOARD_ID = stringPreferencesKey("keyboardId")
         val KEYBOARD_NAME = stringPreferencesKey("keyboardName")
