@@ -14,7 +14,7 @@ import dev.stevenjin.stevenpiano.data.art.ArtworkProgress
 /** What artwork says: the Library's progress row, the fetch notification, the transparency and credit lines, and the covers'. */
 object ArtworkCopy {
     /** Under the Fetch artwork automatically switch, and in the About area. */
-    const val TRANSPARENCY = "Uses Wikipedia. Nothing about you is sent."
+    const val TRANSPARENCY = "Uses Wikipedia, and Deezer for how popular each song is (its title and artist). Nothing about you is sent."
 
     /** The credit wherever Wikipedia's text or a portrait shows. */
     const val ATTRIBUTION = "Text from Wikipedia, CC BY-SA 4.0 · portraits from Wikimedia Commons"

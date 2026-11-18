@@ -99,6 +99,14 @@ on the tablet*). Made by Steven Jin. Version 1.47.
   the system media controls (which show the queue and Repeat).
 - **One piece per Play** (from 1.26): a Play plays one piece. When it ends, the
   next one in Up next loads and waits at its start; press Play for it.
+- **Sort the songs** (1.48): Pieces, Favorites, Disney, a composer's pieces and a
+  search sort by **A–Z** (as before), **Popular** (how popular the song is worldwide,
+  from Deezer's public chart, looked up once per piece, plus this piano's own plays),
+  **Hardest** (speed in the busiest 10 seconds, the most keys held at once, leaps and
+  range, each ranked within the library), **Most keys at once** or **Recently played**.
+  Each row then shows its measure. A play counts once a piece ends or sounds 30 seconds.
+  **Disney** is a chip of its own: a song from a built-in list of Disney composers and
+  songs, or whose Deezer album is on a Disney label.
 - **Artwork and notes**: composers' portraits and two-sentence blurbs, and each
   piece's notes (tap the title on Now playing), from Wikipedia (`en.wikipedia.org`,
   `upload.wikimedia.org`); each piece's album cover from Apple's catalogue
@@ -408,7 +416,9 @@ Bradley Cooper") whose own page finds nothing is looked up by its first name; fi
 lookups an artist at most. An artist without a free photograph, or a company, keeps the
 roll cards below. For all this the app talks to **two hosts**: `en.wikipedia.org` (page
 summaries and search) and `upload.wikimedia.org` (the portraits), and, for album covers,
-Apple's two (below); a redirect anywhere else is refused.
+Apple's two (below); a redirect anywhere else is refused. From 1.48 the song sort's
+popularity asks `api.deezer.com` too (a piece's title and artist, once each; its album's
+label for the Disney section), only while Fetch artwork automatically is on.
 (The only other network use is the app's own updates and the piano's firmware
 releases, below, Studio's models when you download them, *Studio*, and Steven's library, *Steven's library*.) What it sends is a page title or a search made from the library's own
 composer names and piece titles ("Claude Debussy", "Clair de lune Claude Debussy"),

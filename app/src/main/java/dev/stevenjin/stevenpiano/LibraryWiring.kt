@@ -229,7 +229,8 @@ internal class LibraryWiring(private val graph: AppGraph, private val app: Appli
 
                 override suspend fun keep(id: Long, rank: Int?, disney: Boolean?, at: Long, key: String) = library.setRank(id, rank, disney, at, key)
             },
-            online = graph.network::isOnline,
+            // Only while Fetch artwork automatically is on: off, the tablet asks no outside service about its pieces.
+            online = { graph.network.isOnline() && graph.settings.value.fetchArtworkAutomatically },
             clock = System::currentTimeMillis,
             log = { Log.i(LIBRARY_TAG, it) },
         )
@@ -268,7 +269,11 @@ internal class LibraryWiring(private val graph: AppGraph, private val app: Appli
             } catch (e: Exception) {
                 Log.w(LIBRARY_TAG, "The measures' backfill stopped; it goes on at the next start", e)
             }
-            combine(graph.network.online, library.count().distinctUntilChanged()) { online, _ -> online }
+            combine(
+                graph.network.online,
+                graph.settings.map { it.fetchArtworkAutomatically }.distinctUntilChanged(),
+                library.count().distinctUntilChanged(),
+            ) { online, fetching, _ -> online && fetching }
                 .debounce(RANKS_SETTLE_MS)
                 .collect { online ->
                     if (!online) return@collect

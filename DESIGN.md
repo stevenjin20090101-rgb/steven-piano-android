@@ -406,3 +406,9 @@ Steven (2026-11-08, multiple choice): "Day, fixed after faults", "About 25 s", "
   (`!ledrestproto=1`). Solid colour, the default: while nothing plays the whole strip shows the colour at full level, and
   the piano fades it to the notes as a piece starts (in its 2 s pause) and back as it ends, over Colour change's time. A
   piece paused still counts as playing, so a pause never flashes the strip solid.
+
+# v1.48 — M82: the song sort
+
+The piece lists gain a header row with **Sort** (A–Z · Popular · Hardest · Most keys at once · Recently played), a menu on
+glass as the playlists' sort is, and a **Disney** chip after Recent. Away from A–Z each row ends with one quiet measure ("18
+notes/s · 10 at once", "10 keys at once", "played 2 days ago"); on a phone it may wrap a long title to two lines.

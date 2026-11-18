@@ -304,3 +304,14 @@ reading at or under it well after the CUT clears it.
 ## The release: 1.47 (versionCode 58)
 
 Nothing plays unless the power plug can cut the 24 V: if its relay may be stuck on, or it stops answering, Play and the other ways of switching the 24 V on are refused, with the reason on the screen, and a piece stops if the plug goes quiet while it plays. The stuck-relay check now waits for fresh readings, so a slow plug reading no longer raises a false alarm. Soft release's settings are hidden on piano firmware 2.1.4 and later, which removed it.
+
+# v1.48 — M82: the song sort and the Disney section
+
+Room schema 8 (`MIGRATION_7_8`, `SchemaV8`, `8.json`, `SchemaV8Test`): nine columns on `pieces` for the measures
+(`data/sort/PieceStats.kt`, at import and a file replacement; older pieces by `StatsBackfill`, never while a piece plays or
+loads), the world rank and the Disney label (`data/sort/WorldRanks.kt`, `net/Deezer.kt`, two requests a second at most, only
+while online and Fetch artwork automatically is on; a classical piece must match its catalogue number, its number in a set and
+its movement, up to 3 searches). `PieceOrder` holds the five orders, saved as `pieceSort`; Hardest's percentile ranks are taken
+across the library when listing. `Plays`: a play counts when `Played.ended` or `soundedMs` ≥ 30 s; `lastPlayedAt` as before.
+`DisneySongs` matches `assets/disney_songs.json`; `DisneyLabel` an album label containing "disney". Deezer gives 100000 to
+little-known tracks; those tie, and sort by plays.
