@@ -640,12 +640,9 @@ private fun LibraryItems(
         }
         if (listing is Listing.Pieces && listing.sort != null && shown.isNotEmpty()) {
             item(key = "pieces-head") {
-                val eyebrow = when (state.category) {
-                    Category.Favorites -> Category.Favorites.label(state.scope)
-                    Category.Disney -> Category.Disney.label(state.scope)
-                    else -> LibraryCopy.PIECES
-                }
-                Box(faded) { PiecesHeader(if (group is Group.Composer) LibraryCopy.PIECES else eyebrow, listing.sort, onSortPieces) }
+                // The list's name: FAVORITES, DISNEY, else PIECES (a composer's page and a search's results too).
+                val named = group == null && (state.category == Category.Favorites || state.category == Category.Disney)
+                Box(faded) { PiecesHeader(if (named) state.category.label(state.scope) else LibraryCopy.PIECES, listing.sort, onSortPieces) }
             }
         }
         when (listing) {
