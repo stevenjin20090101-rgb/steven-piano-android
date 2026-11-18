@@ -95,7 +95,12 @@ class WorldRanksTest {
         assertEquals("d 960", WorldRankMatch.catalogue("Sonata in B-flat Major, D960 [8]"))
         assertEquals("k 331", WorldRankMatch.catalogue("Sonata in A Major, KV 331"))
         assertNull(WorldRankMatch.catalogue("Clair de lune"))
-        assertEquals("bwv 870 bach", WorldRankMatch.fallbackTerm("Prelude and Fugue in C Major, WTC II, BWV 870", "Bach"))
+        assertEquals(listOf("bwv 870 bach"), WorldRankMatch.fallbackTerms("Prelude and Fugue in C Major, WTC II, BWV 870", "Bach"))
+        assertEquals(
+            "the catalogue number, then every word of the title (the first search had the set's name alone)",
+            listOf("op 32 no 13 rachmaninoff", "13 preludes op 32 no 13 rachmaninoff"),
+            WorldRankMatch.fallbackTerms("13 Préludes, Opus 32 (1910) — No. 13", "Rachmaninoff"),
+        )
         fun track(title: String, rank: Int, artist: String = "Some Pianist", album: String = "Chopin: Nocturnes") = DeezerTrack(title, title, artist, album, 1, rank)
         val results = listOf(
             track("Nocturne in C-Sharp Minor, Op. posth.", 900_000),   // another work: no Op. 48 No. 1
@@ -104,7 +109,14 @@ class WorldRanksTest {
             track("Nocturne in C Minor, Op. 48 No. 1", 990_000, album = "Relaxing Piano"),   // nothing names Chopin
         )
         assertEquals(450_000, WorldRankMatch.pick("Nocturne in C Minor, Op. 48 No. 1", "Chopin", classical = true, results)?.rank)
-        assertEquals("a set's title holds its pieces", 450_000, WorldRankMatch.pick("Nocturnes, Op. 48", "Chopin", classical = true, results)?.rank)
+        assertEquals("a set's title holds its pieces", 300_000, WorldRankMatch.pick("Nocturnes, Op. 48", "Chopin", classical = true, results)?.rank)
+        // The piece within a set after " — " counts: Passepied is not the suite's Clair de lune.
+        val suite = listOf(
+            track("Suite bergamasque, L. 75: III. Clair de lune", 673_034, album = "Debussy: Suite bergamasque"),
+            track("Suite bergamasque, L. 75: IV. Passepied", 120_000, album = "Debussy: Suite bergamasque"),
+        )
+        assertEquals(120_000, WorldRankMatch.pick("Suite bergamasque (1905) — Passepied", "Debussy", classical = true, suite)?.rank)
+        assertEquals(673_034, WorldRankMatch.pick("Clair de lune", "Debussy", classical = true, suite)?.rank)
     }
 
     @Test

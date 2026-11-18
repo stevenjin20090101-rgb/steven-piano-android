@@ -37,18 +37,28 @@ class PacedDeezer(private val inner: DeezerApi, private val pacer: RequestPacer)
  *   one holding the other as whole words, then the rest), and among equals the most played (`rank`): the studio track,
  *   not a remix of the same name.
  * - **A classical piece**: a work is recorded many times under many titles, so its popularity is its most played
- *   recording that fits. When the title names a catalogue number ([catalogue]: "Op. 28 No. 15", "BWV 846", "K. 331",
- *   "D. 960", "S. 141", "WoO 59"), the result's title must name the same work (or one of the set it names: "Op. 10" holds
- *   "Op. 10 No. 4"); otherwise [CoverMatch.trackFits]. Deezer's search wants every word it is given, so a long title
- *   ("… in C Major, WTC II, BWV 870") often finds nothing: a classical piece then has a second search, its catalogue
- *   number and its composer alone ([fallbackTerm]).
+ *   recording that fits. The result's title must hold the piece's title as [CoverMatch.trackFits] reads them, over all
+ *   their words ([workWords]: the piece within a set after " — " counts, "Suite bergamasque — Passepied" is not "Clair de
+ *   lune"; "[2]" and a year in brackets do not); and when the title names a catalogue number ([catalogue]: "Op. 28 No.
+ *   15", "BWV 846", "K. 331", "D. 960", "S. 141", "WoO 59"), the same work (or one of the set it names: "Op. 10" holds
+ *   "Op. 10 No. 4"). Deezer's search wants every word it is given, so a long title ("… in C Major, WTC II, BWV 870")
+ *   often finds nothing, and a short one finds the set's best-known piece: a classical piece whose first search fits
+ *   nothing has up to two more ([fallbackTerms]), its catalogue number and composer, then all its title's words.
  */
 object WorldRankMatch {
     fun term(title: String, artist: String): String = CoverMatch.term(title, artist)
 
-    /** The second search for a classical piece whose first found nothing that fits: "op 10 no 4 chopin"; null without a catalogue number. */
-    fun fallbackTerm(title: String, artist: String): String? =
-        catalogue(title)?.let { "$it ${CoverMatch.words(artist).joinToString(" ")}".trim() }
+    /**
+     * The searches for a classical piece whose first ([term]) fits nothing, in turn: its catalogue number and composer ("op
+     * 10 no 4 chopin"), then all its title's words and the composer ("suite bergamasque passepied debussy"); each only when
+     * it differs from those before.
+     */
+    fun fallbackTerms(title: String, artist: String): List<String> {
+        val name = CoverMatch.words(artist).joinToString(" ")
+        val first = term(title, artist)
+        return listOfNotNull(catalogue(title)?.let { "$it $name" }, "${workWords(title).joinToString(" ")} $name")
+            .map(String::trim).distinct().filter { it != first }
+    }
 
     fun pick(title: String, artist: String, classical: Boolean, results: List<DeezerTrack>): DeezerTrack? {
         val core = CoverMatch.core(title)
@@ -57,8 +67,13 @@ object WorldRankMatch {
         val byArtist = results.filter { artistFits(names, it, classical) }
         if (classical) {
             val work = catalogue(title)
-            return byArtist.filter { track -> if (work != null) namesWork(work, track) else titles(track).any { CoverMatch.trackFits(core, CoverMatch.core(it), true) } }
-                .maxByOrNull { it.rank }
+            val words = workWords(title).joinToString(" ")
+            return byArtist.filter { track ->
+                titles(track).any { name ->
+                    CoverMatch.trackFits(words, workWords(name).joinToString(" "), classical = true) &&
+                        (work == null || catalogues(name).any { it == work || it.startsWith("$work ") })
+                }
+            }.maxByOrNull { it.rank }
         }
         return byArtist.mapNotNull { track -> closeness(core, track)?.let { track to it } }
             .maxWithOrNull(compareBy<Pair<DeezerTrack, Int>>({ it.second }, { it.first.rank }))
@@ -71,10 +86,17 @@ object WorldRankMatch {
      */
     fun catalogue(text: String): String? = catalogues(text).firstOrNull()
 
-    private fun catalogues(text: String): List<String> {
-        val words = CoverMatch.words(YEAR.replace(text, " ")).flatMap { word ->
+    /**
+     * A classical title's words as the fit reads them: folded, "[2]" (MAESTRO's second performance) and a year in brackets
+     * left out, "Opus" as "op", "KV" as "k", "Nr." as "no", "D960" as "d 960".
+     */
+    fun workWords(text: String): List<String> =
+        CoverMatch.words(BRACKETED.replace(YEAR.replace(text, " "), " ")).flatMap { word ->
             JOINED.matchEntire(word)?.let { listOf(it.groupValues[1], it.groupValues[2]) } ?: listOf(word)
         }.map { ALIASES[it] ?: it }
+
+    private fun catalogues(text: String): List<String> {
+        val words = workWords(text)
         val found = ArrayList<String>()
         var i = 0
         while (i < words.size - 1) {
@@ -92,10 +114,6 @@ object WorldRankMatch {
         }
         return found
     }
-
-    /** Whether [track]'s title names [work], or one piece of the set [work] is ("op 10" names "op 10 no 4"). */
-    private fun namesWork(work: String, track: DeezerTrack): Boolean =
-        titles(track).flatMap(::catalogues).any { it == work || it.startsWith("$work ") }
 
     private fun titles(track: DeezerTrack): List<String> = listOfNotNull(track.titleShort, track.title)
 
@@ -122,6 +140,9 @@ object WorldRankMatch {
     /** A prefix and its number written together: "d960", "bwv846", "op28". */
     private val JOINED = Regex("^(op|bwv|kv|k|d|s|woo|hwv|rv)(\\d+)$")
 
+    /** A square bracket's words: MAESTRO's "[2]". */
+    private val BRACKETED = Regex("\\[[^\\]]*\\]")
+
     /** A year in brackets, as piano-midi.de's titles give it: "(1903)". */
     private val YEAR = Regex("\\(\\s*1[5-9]\\d\\d\\s*\\)")
 }
@@ -134,7 +155,7 @@ object DisneyLabel {
 /**
  * The world-popularity lookup (M82): every piece due ([Store.candidates]: Classical or Modern, never looked up or renamed
  * since) is searched on Deezer once, through [api] (paced: [PacedDeezer]), and the rank of the track [WorldRankMatch]
- * picks kept with when it ran ([Store.keep]; a classical piece may have a second search, [WorldRankMatch.fallbackTerm]);
+ * picks kept with when it ran ([Store.keep]; a classical piece may have two more searches, [WorldRankMatch.fallbackTerms]);
  * null when none fits, or the piece names no artist (nothing is asked then).
  * A Modern song that matched has its album asked too, for the Disney section ([DisneyLabel]). Offline ([online] false)
  * the run ends and nothing is recorded; a failed request is never recorded either: it waits [FIRST_BACKOFF_MS], twice as
@@ -205,11 +226,13 @@ class WorldRanks(
         val artist = ArtworkFetcher.pageName(piece.composerShort)
         if (artist == null || CoverMatch.core(piece.title).isEmpty()) return null to null
         val classical = piece.genre == Genres.CLASSICAL
-        val track = WorldRankMatch.pick(piece.title, artist, classical, api.search(WorldRankMatch.term(piece.title, artist), RESULTS))
-            ?: WorldRankMatch.fallbackTerm(piece.title, artist)?.takeIf { classical }?.let { term ->
-                WorldRankMatch.pick(piece.title, artist, classical, api.search(term, RESULTS))
-            }
-            ?: return null to null
+        val terms = listOf(WorldRankMatch.term(piece.title, artist)) + if (classical) WorldRankMatch.fallbackTerms(piece.title, artist) else emptyList()
+        var track: DeezerTrack? = null
+        for (term in terms) {
+            track = WorldRankMatch.pick(piece.title, artist, classical, api.search(term, RESULTS))
+            if (track != null) break
+        }
+        if (track == null) return null to null
         val disney = if (classical) null else track.albumId?.let { DisneyLabel.isDisney(api.albumLabel(it)) }
         return track.rank to disney
     }
