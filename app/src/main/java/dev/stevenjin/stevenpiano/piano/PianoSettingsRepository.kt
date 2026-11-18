@@ -336,7 +336,8 @@ class PianoSettingsRepository(
      * One line of the loudness steps' calibration (M83; BLE_SETTINGS.md › "Distinct loudness steps"): [line], only one of
      * its own ([LoudnessSteps.ours]: `calstrike`, `steptable`, `velsteps`, `fullpower 0`, `save`), sent now and its own reply
      * awaited ([LoudnessSteps.answers]), trimmed: never a setting's error on the pages. Null when it wasn't sent (no
-     * console, before the dump, from a connection the piano doesn't let write) or nothing came in [timeoutMs]. When the
+     * console, before the dump, from a connection the piano doesn't let write), nothing came in [timeoutMs], or the
+     * connection ended meanwhile (at once). When the
      * piano confirms `fullpower 0`, that is recorded as Full power chosen off (1.22's guard): after a calibration nothing
      * turns it back on. One at a time; main thread.
      */
@@ -503,19 +504,19 @@ class PianoSettingsRepository(
 
         /** M83: the calibration's line on its way, and its reply awaited. */
         private var stepsLine: String? = null
-        private var stepsReply: CompletableDeferred<String>? = null
+        private var stepsReply: CompletableDeferred<String?>? = null
 
         /**
          * A calibration line sent, its reply awaited; null (not sent) for a line that isn't the calibration's, before the
          * dump, or from a connection the piano doesn't let write. What waited for the lock goes first, as [send] does; the
          * line itself never names a setting's refusal on the pages ([lastCommand] stays).
          */
-        fun converse(line: String): CompletableDeferred<String>? {
+        fun converse(line: String): CompletableDeferred<String?>? {
             if (!ready || !handshake.lock.phase.writable || !LoudnessSteps.ours(line)) {
                 log("Not sent: ${line.substringBefore(' ')}")
                 return null
             }
-            val reply = CompletableDeferred<String>()
+            val reply = CompletableDeferred<String?>()
             stepsLine = line
             stepsReply = reply
             releaseQueued()
@@ -578,7 +579,10 @@ class PianoSettingsRepository(
             lines.filter(::isRead).forEach(console::sendLine)
         }
 
-        fun close() = job.cancel()
+        fun close() {
+            stepsReply?.complete(null)   // M83: the link went: the calibration hears so at once, not after its wait
+            job.cancel()
+        }
 
         /**
          * [temporary]: never counted for a save; [hold] (with it, as [holdTemporarily] asks): a save waits until it is

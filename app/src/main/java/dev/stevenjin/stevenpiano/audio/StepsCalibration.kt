@@ -320,7 +320,7 @@ class StepsCalibration(
             if (!running) return false
             when (val read = reply?.let { LoudnessSteps.read(line, it) }) {
                 null -> {
-                    end(StepsCopy.STOPPED_SILENT)
+                    end(interruption() ?: StepsCopy.STOPPED_SILENT)   // the link gone says so, rather than "didn't answer"
                     return false
                 }
                 is LoudnessSteps.Reply.Struck -> {
@@ -381,7 +381,7 @@ class StepsCalibration(
         val reply = piano.send(line)
         if (!running) return false
         return when (val read = reply?.let { LoudnessSteps.read(line, it) }) {
-            null -> false.also { end(StepsCopy.STOPPED_SILENT) }
+            null -> false.also { end(interruption() ?: StepsCopy.STOPPED_SILENT) }
             LoudnessSteps.Reply.Done -> true
             is LoudnessSteps.Reply.Other -> false.also { end(StepsCopy.refused(read.text)) }
             else -> false.also { end(StepsCopy.refused(reply.orEmpty().trim())) }

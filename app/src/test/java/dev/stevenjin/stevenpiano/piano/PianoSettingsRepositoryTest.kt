@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.ble.EmulatedConsole
 import dev.stevenjin.stevenpiano.ble.FakeConsole
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
@@ -652,6 +653,21 @@ class PianoSettingsRepositoryTest {
         settle()
         assertEquals(listOf(false, true), choices)
         assertEquals("1", repo.ready().values["fullpower"])
+    }
+
+    @Test
+    fun `a calibration line unanswered when the link drops comes back empty at once, not after its wait (M83)`() = runTest {
+        val silent = FakeConsole { line -> if (line.startsWith("calstrike")) emptyList() else piano.handle(line) }
+        val repo = connected(silent)
+        val reply = async { repo.converse("calstrike 60 2400") }
+        advanceTimeBy(100)
+        runCurrent()
+        link.drop()
+        runCurrent()
+        assertTrue(reply.isCompleted)
+        assertNull(reply.await())
+        assertTrue("at once", currentTime < 1_000)
+        assertNull("no piano, nothing sent", repo.converse("calstrike 60 2400"))
     }
 
     @Test
