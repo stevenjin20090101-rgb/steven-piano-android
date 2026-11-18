@@ -70,9 +70,9 @@ object StepsCopy {
         return if (ms < MINUTE_MS) "Under a minute left" else "About $minutes min left"
     }
 
-    /** "80 keys: 5 steps · 2 keys: 4 steps", most steps first. */
+    /** "80 keys: 5 steps · 2 keys: 4 steps", most steps first; each part kept on one line (no-break spaces). */
     fun summary(result: StepsResult): String =
-        result.counts.entries.sortedByDescending { it.key }.joinToString(" · ") { (steps, keys) -> "${keys(keys)}: $steps steps" }
+        result.counts.entries.sortedByDescending { it.key }.joinToString(" · ") { (steps, keys) -> "${keys(keys)}: $steps steps".replace(' ', NO_BREAK) }
 
     /** "Not calibrated: C1, F♯7. They spread their steps over the floor and the ceiling." */
     fun uncalibrated(keys: List<Int>): String? {
@@ -120,4 +120,5 @@ object StepsCopy {
     fun refused(text: String): String = "Stopped: the piano said “$text”."
 
     private const val MINUTE_MS = 60_000L
+    private const val NO_BREAK = '\u00A0'
 }
