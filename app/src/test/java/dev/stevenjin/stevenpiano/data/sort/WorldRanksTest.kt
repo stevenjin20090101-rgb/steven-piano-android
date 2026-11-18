@@ -12,6 +12,7 @@ package dev.stevenjin.stevenpiano.data.sort
 import dev.stevenjin.stevenpiano.data.db.RankCandidate
 import dev.stevenjin.stevenpiano.net.Deezer
 import dev.stevenjin.stevenpiano.net.DeezerBusyException
+import dev.stevenjin.stevenpiano.net.DeezerTrack
 import dev.stevenjin.stevenpiano.net.DeezerUrls
 import dev.stevenjin.stevenpiano.net.FakeTransport
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +89,25 @@ class WorldRanksTest {
     }
 
     @Test
+    fun `a classical piece is its work's most played recording, the catalogue number deciding which work`() {
+        assertEquals("bwv 870", WorldRankMatch.catalogue("Prelude and Fugue in C Major, WTC II, BWV 870 [2]"))
+        assertEquals("op 32 no 13", WorldRankMatch.catalogue("13 Préludes, Opus 32 (1910) — No. 13"))
+        assertEquals("d 960", WorldRankMatch.catalogue("Sonata in B-flat Major, D960 [8]"))
+        assertEquals("k 331", WorldRankMatch.catalogue("Sonata in A Major, KV 331"))
+        assertNull(WorldRankMatch.catalogue("Clair de lune"))
+        assertEquals("bwv 870 bach", WorldRankMatch.fallbackTerm("Prelude and Fugue in C Major, WTC II, BWV 870", "Bach"))
+        fun track(title: String, rank: Int, artist: String = "Some Pianist", album: String = "Chopin: Nocturnes") = DeezerTrack(title, title, artist, album, 1, rank)
+        val results = listOf(
+            track("Nocturne in C-Sharp Minor, Op. posth.", 900_000),   // another work: no Op. 48 No. 1
+            track("Nocturnes, Op. 48: No. 1 in C Minor", 300_000),
+            track("Chopin: Nocturne in C Minor, Op. 48 No. 1", 450_000, artist = "Another Pianist"),
+            track("Nocturne in C Minor, Op. 48 No. 1", 990_000, album = "Relaxing Piano"),   // nothing names Chopin
+        )
+        assertEquals(450_000, WorldRankMatch.pick("Nocturne in C Minor, Op. 48 No. 1", "Chopin", classical = true, results)?.rank)
+        assertEquals("a set's title holds its pieces", 450_000, WorldRankMatch.pick("Nocturnes, Op. 48", "Chopin", classical = true, results)?.rank)
+    }
+
+    @Test
     fun `an album on a Disney label is Disney's, read from the album's answer`() = runBlocking {
         transport.ok(DeezerUrls.album(302127), """{"id": 302127, "title": "Divinely Uninspired", "label": "Columbia"}""".toByteArray())
         transport.ok(DeezerUrls.album(5000), """{"id": 5000, "title": "Frozen (Original Motion Picture Soundtrack)", "label": "Walt Disney Records"}""".toByteArray())
@@ -117,7 +137,12 @@ class WorldRanksTest {
             RankCandidate(2, "Untitled sketch", "", genre = 2, rankKey = "untitled sketch|"),
             RankCandidate(3, "Nocturne in E-flat major, Op. 9 No. 2", "Chopin", genre = 1, rankKey = "nocturne in e-flat major, op. 9 no. 2|chopin"),
         )
+        pieces += RankCandidate(4, "Prelude and Fugue in C Major, WTC II, BWV 870", "Bach", genre = 1, rankKey = "prelude and fugue in c major, wtc ii, bwv 870|bach")
         transport.ok(chopin, chopinJson.toByteArray())
+        // Its full title finds nothing (Deezer wants every word); its catalogue number and composer do.
+        val bach = "https://api.deezer.com/search?q=prelude+and+fugue+in+c+major+wtc+ii+bwv+870+bach&limit=25"
+        val bwv = "https://api.deezer.com/search?q=bwv+870+bach&limit=25"
+        transport.ok(bwv, """{"data": [{"title": "The Well-Tempered Clavier, Book 2: Prelude and Fugue No. 1 in C Major, BWV 870", "rank": 135740, "artist": {"name": "Keith Jarrett"}, "album": {"id": 30, "title": "J.S. Bach: The Well-Tempered Clavier, Book II"}}]}""".toByteArray())
         val kept = mutableListOf<List<Any?>>()
         val waits = mutableListOf<Long>()
         val ranks = WorldRanks(
@@ -140,18 +165,19 @@ class WorldRanksTest {
                 }
             },
         )
-        assertEquals(3, ranks.run())
+        assertEquals(4, ranks.run())
         assertEquals(
             listOf(
                 listOf(1L, 870_000, true, "let it go|idina menzel"),
                 listOf(2L, null, null, "untitled sketch|"),
                 listOf(3L, 610_000, null, "nocturne in e-flat major, op. 9 no. 2|chopin"),   // a classical piece's album is not asked
+                listOf(4L, 135_740, null, "prelude and fugue in c major, wtc ii, bwv 870|bach"),
             ),
             kept,
         )
         assertEquals("the quota waited out once", listOf(WorldRanks.FIRST_BACKOFF_MS), waits)
         val asked = transport.opened.map { it.first }
-        assertEquals(listOf(frozen, frozen, DeezerUrls.album(5000), chopin), asked)
+        assertEquals(listOf(frozen, frozen, DeezerUrls.album(5000), chopin, bach, bwv), asked)
         assertEquals("nothing is left to ask", 0, ranks.run())
         assertEquals(asked.size, transport.opened.size)
     }
