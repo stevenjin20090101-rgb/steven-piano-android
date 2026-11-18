@@ -1188,6 +1188,13 @@ idle, at least 2 W) or three switch-offs didn't take; while the 24 V is off its 
 answering · 24 V off", which is normal, not a fault. The web panel's Settings › System shows the same. Without a plug
 paired, nothing of this happens.
 
+**Nothing plays unless the plug can cut the 24 V** (1.47; Steven: the plug is the only fail-safe). While its relay may be
+stuck on (two readings at least 6 s after a cut both still drawing), or it has neither advertised nor answered the tablet
+for 2.5 minutes, nothing switches the 24 V on: Play, Keys, Turn the piano on, the web panel and the rest are refused, and
+the card says why ("Nothing plays: the power plug may be stuck on…" or "…isn't answering…"). It clears by itself once the
+plug reads off and drawing nothing, or answers again. During a piece, 20 seconds without a reading from it stop the piece
+and cut the 24 V ("The power plug stopped answering — 24 V cut").
+
 **Power use** (1.36, Piano › Power use, under Power plug): the watts the piano's 24 V supply draws now (from the plug's
 adverts; "—" when none came for 10 seconds), the last 10 minutes as a line, today's and the all-time peak with their
 times, and the energy today, this month and since pairing in kWh. It counts only the 24 V supply on the plug. A gap in

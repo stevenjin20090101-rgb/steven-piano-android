@@ -774,6 +774,12 @@ class RailKeeper(
     /** When the keeper started ([now]'s clock): the plug gets [PLUG_SILENT_MS] from then before it counts as silent. */
     private var startedAt: Long? = null
 
+    /** v1.47: when the plug last answered the tablet itself (a status, an ARM or a CUT it took), [now]'s clock. */
+    private var answeredAt: Long? = null
+
+    /** The plug's status, its answer remembered ([answeredAt]). */
+    private suspend fun asked(): PlugStatus? = plug.status()?.also { answeredAt = now() }
+
     /**
      * v1.47 (Steven: "nothing plays if the plug isn't responding, as that's the only fail-safe"): why the plug can't be
      * trusted now, or null when it can (or there is no plug: [available] false, the app as before the plug). Its relay
@@ -784,7 +790,10 @@ class RailKeeper(
         if (!available.value) return null
         if (_welded.value) return PlugUnsafe.STUCK
         val t = now()
-        val silent = plug.silentFor(t) ?: return null
+        val advertSilent = plug.silentFor(t) ?: return null
+        // With the rail off its adverts are scanned for at low power and can come tens of seconds apart; the watch's look
+        // once a minute ([watch]) answering counts too.
+        val silent = minOf(advertSilent, answeredAt?.let { t - it } ?: Long.MAX_VALUE)
         val since = startedAt?.let { t - it } ?: return null
         return if (silent > PLUG_SILENT_MS && since > PLUG_SILENT_MS) PlugUnsafe.SILENT else null
     }
@@ -1130,7 +1139,7 @@ class RailKeeper(
         repeat(ARM_TRIES) { i ->
             if (i > 0 && waitFor(now() + ARM_AGAIN_MS) { !wantedNow() }) return null
             if (arm()) {
-                if (plug.status()?.output != false) return true
+                if (asked()?.output != false) return true
                 log("ARM: the plug answered, but its status says off")
             }
             if (!wantedNow()) return null
@@ -1487,7 +1496,7 @@ class RailKeeper(
      */
     private suspend fun plugCheck(): Boolean {
         plugCheckAt = now() + PLUG_CHECK_MS
-        val status = plug.status()
+        val status = asked()
         if (!wantedNow() || !available.value || _phase.value != RailPhase.Up) return false
         if (status == null) {
             if (++plugMisses < PLUG_MISSES) return false
@@ -1669,7 +1678,7 @@ class RailKeeper(
      */
     private suspend fun watch() {
         if (!available.value || wantedNow() || updating) return
-        val status = plug.status()
+        val status = asked()
         if (status == null) {
             missedPlug = true
             return
@@ -1707,7 +1716,7 @@ class RailKeeper(
             return false
         }
         weldJob?.cancel()   // the rail is wanted again: what the plug says now isn't about the last CUT
-        val ok = plug.arm(TOGGLE_AFTER_S)
+        val ok = plug.arm(TOGGLE_AFTER_S).also { if (it) answeredAt = now() }
         if (ok) _armedAt.value = now() else log("ARM: the plug didn't answer")
         return ok
     }
@@ -1720,7 +1729,7 @@ class RailKeeper(
      */
     private suspend fun cutRail(): Boolean {
         cutAt = now()
-        if (plug.cut()) {
+        if (plug.cut().also { if (it) answeredAt = now() }) {
             cutAt = now()
             _armedAt.value = null
             weldJob?.cancel()
@@ -1961,10 +1970,11 @@ class RailKeeper(
         const val WELD_WAIT_MS = 8_000L
 
         /**
-         * v1.47: no advert for this long, the plug isn't answering: Play refused and every want with it. While the rail is
-         * up, [SILENT_CUT_MS] without a reading stops what plays and CUTs.
+         * v1.47: neither an advert nor an answer for this long, the plug isn't answering: Play refused and every want with
+         * it (two and a half of the idle watch's minutes: adverts scanned at low power can be far apart). While the rail is
+         * up (adverts scanned fast), [SILENT_CUT_MS] without a reading stops what plays and CUTs.
          */
-        const val PLUG_SILENT_MS = 30_000L
+        const val PLUG_SILENT_MS = 150_000L
         const val SILENT_CUT_MS = 20_000L
 
         /** The plug watch (v1.29 — M66): one look a minute while nothing wants the rail, its settings every 10 minutes. */

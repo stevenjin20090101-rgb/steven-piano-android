@@ -198,7 +198,7 @@ class AdvertWatchTest {
     }
 
     @Test
-    fun `adverts silent - 10 s reads as unread, 20 s with the rail up stops and CUTs, and nothing plays until they come back (v1_47)`() = runTest {
+    fun `adverts silent - 10 s reads as unread, 20 s with the rail up stops and CUTs, and a plug answering nothing for 2_5 min plays nothing (v1_47)`() = runTest {
         val s = Stack(this, plugOn = false)
         val keeper = s.keeper()
         keeper.wanted(RailKeeper.PLAY, true)
@@ -217,8 +217,11 @@ class AdvertWatchTest {
         assertFalse("CUT", s.plug.output())
         assertEquals("no coil fault: no check due", 0, s.host.due)
 
-        advanceTimeBy(10_000)
-        assertEquals("30 s without an advert: the plug isn't answering", PlugUnsafe.SILENT, keeper.plugUnsafe())
+        advanceTimeBy(RailKeeper.PLUG_SILENT_MS)
+        assertNull("still answering the tablet over its connection: not silent", keeper.plugUnsafe())
+        s.plug.silent = true   // and now its connection answers nothing either
+        advanceTimeBy(RailKeeper.PLUG_SILENT_MS + 10_000)
+        assertEquals("neither an advert nor an answer for 2.5 min: the plug isn't answering", PlugUnsafe.SILENT, keeper.plugUnsafe())
         keeper.wanted(RailKeeper.PLAY, true)
         advanceTimeBy(5_000)
         assertFalse("nothing switches it on", s.plug.output())
@@ -227,6 +230,7 @@ class AdvertWatchTest {
 
         // Back: the next Play brings the rail up again, and the floor watch only logs a coil's 12 W mid-piece.
         keeper.wanted(RailKeeper.PLAY, false)
+        s.plug.silent = false
         s.advertising = true
         advanceTimeBy(2_000)
         assertNull(keeper.plugUnsafe())

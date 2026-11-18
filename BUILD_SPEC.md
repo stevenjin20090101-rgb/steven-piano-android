@@ -291,8 +291,9 @@ piano's dump lists it (an older piano can still turn soft release off), a sectio
 # v1.47: nothing plays unless the power plug can cut the 24 V
 
 Steven (2026-11-18): "nothing plays if the plug is not responding, as that's the only fail-safe". `RailKeeper.plugUnsafe()`:
-`STUCK` while `welded`, `SILENT` after `PLUG_SILENT_MS` (30 s) without an advert (`RailPlug.silentFor`, from `PlugAdverts`;
-the keeper's own first 30 s are grace). While either holds every want is refused, like the cool-down (`RailMessage.PlugRefused`),
+`STUCK` while `welded`, `SILENT` after `PLUG_SILENT_MS` (2.5 min) with neither an advert (`RailPlug.silentFor`, from `PlugAdverts`) nor
+an answer to a status, ARM or CUT (`answeredAt`: with the rail off its adverts are scanned at low power, but the idle watch asks
+it once a minute); the keeper's own first 2.5 min are grace. While either holds every want is refused, like the cool-down (`RailMessage.PlugRefused`),
 so nothing ARMs and the notes stay held; `SafetyRunner.admit` refuses Play with `PowerCopy.unsafe` on the card for a moment
 (`SafetyState.plug`), and the panel's refusal says it too. With the rail up, `SILENT_CUT_MS` (20 s) without a reading stops what
 plays and CUTs (`RailMessage.PlugSilent`; no coil fault, so no cool-down). No plug paired: as before. The stuck-relay verdict
