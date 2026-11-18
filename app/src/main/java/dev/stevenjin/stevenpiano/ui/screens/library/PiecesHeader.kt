@@ -70,7 +70,7 @@ fun PiecesHeader(eyebrow: String, sort: PieceSort, onSort: (PieceSort) -> Unit) 
             GlassPopover(expanded = open, onDismissRequest = { open = false }, alignment = Alignment.End) {
                 Column(Modifier.width(IntrinsicSize.Max).widthIn(min = MENU_MIN_WIDTH).selectableGroup()) {
                     PieceSort.entries.forEach { option ->
-                        MenuChoice(option.label, selected = option == sort, oneLine = true, onClick = {
+                        MenuChoice(LibraryCopy.sortLabel(option), selected = option == sort, oneLine = true, onClick = {
                             open = false
                             if (option != sort) onSort(option)
                         })
@@ -93,7 +93,7 @@ private fun PieceSortButton(sort: PieceSort, onClick: () -> Unit) {
             .padding(start = 12.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(sort.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
+        Text(LibraryCopy.sortLabel(sort), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, softWrap = false)
         Spacer(Modifier.width(4.dp))
         Icon(painterResource(R.drawable.ic_chevron_down), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }

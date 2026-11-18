@@ -15,24 +15,25 @@ import kotlin.math.ln
 
 /**
  * The order of the Library's piece lists (M82): Pieces, Favorites, Disney, a composer's pieces and a search's results,
- * chosen with the pop-up button at the end of their header row and kept as `pieceSort`, as the playlists' order is.
+ * chosen with the pop-up button at the end of their header row and kept as `pieceSort`, as the playlists' order is (its
+ * words are `ui.LibraryCopy.sortLabel`'s).
  * Recent keeps its own order, a playlist its own. The tablet's alone: the web panel lists pieces by title.
  */
-enum class PieceSort(val label: String) {
+enum class PieceSort {
     /** By title, accents ignored: the order before M82, and the default. */
-    TITLE("A–Z"),
+    TITLE,
 
     /** The world's popularity (Deezer's rank) first, then this piano's own plays: [PieceOrder.popularity]. */
-    POPULAR("Popular"),
+    POPULAR,
 
     /** Speed, chords, leaps and range together: [PieceOrder.hardness]. */
-    HARDEST("Hardest"),
+    HARDEST,
 
     /** The most keys held down together, then the most moments that reach it. */
-    MOST_KEYS("Most keys at once"),
+    MOST_KEYS,
 
     /** When it last started on this piano, newest first; never played last. */
-    RECENTLY_PLAYED("Recently played"),
+    RECENTLY_PLAYED,
     ;
 
     /** Whether the order ranks a piece against the whole library, so the listing needs every piece's [PieceMeasure]. */

@@ -114,8 +114,17 @@ object LibraryCopy {
     /** The header row's eyebrow over Pieces, a composer's pieces and a search's results. */
     const val PIECES = "Pieces"
 
+    /** An order's name, on the pop-up button and in its menu. */
+    fun sortLabel(sort: PieceSort): String = when (sort) {
+        PieceSort.TITLE -> "A–Z"
+        PieceSort.POPULAR -> "Popular"
+        PieceSort.HARDEST -> "Hardest"
+        PieceSort.MOST_KEYS -> "Most keys at once"
+        PieceSort.RECENTLY_PLAYED -> "Recently played"
+    }
+
     /** What TalkBack reads for the sort's pop-up button: "Sort pieces, Hardest". */
-    fun sortDescription(sort: PieceSort): String = "Sort pieces, ${sort.label}"
+    fun sortDescription(sort: PieceSort): String = "Sort pieces, ${sortLabel(sort)}"
 
     /** The Disney section's empty listing: its title and the line under it. */
     const val NO_DISNEY = "No Disney songs yet."
