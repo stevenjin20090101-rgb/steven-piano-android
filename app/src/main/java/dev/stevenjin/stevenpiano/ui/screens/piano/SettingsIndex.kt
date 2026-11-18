@@ -17,6 +17,7 @@ import dev.stevenjin.stevenpiano.piano.PianoRow
 import dev.stevenjin.stevenpiano.piano.PianoSection
 import dev.stevenjin.stevenpiano.piano.PianoSettings
 import dev.stevenjin.stevenpiano.ui.LightsCopy
+import dev.stevenjin.stevenpiano.ui.StepsCopy
 import dev.stevenjin.stevenpiano.ui.SettingsPage
 import java.text.Normalizer
 import java.util.Locale
@@ -85,6 +86,7 @@ object SettingsIndex {
         PianoRow.BackgroundGlow -> LedColour.AMBIENT
         PianoRow.ColourChange -> LedColour.FADE
         PianoRow.BetweenPieces -> LedRest.KEY   // M81: the tablet's own choice, anchored on the key it drives
+        PianoRow.Steps -> PianoSettings.STEPS_ANCHOR   // M83
         PianoRow.KeyForceNote -> null
     }
 
@@ -160,6 +162,7 @@ object SettingsIndex {
             PianoRow.BackgroundGlow -> LightsCopy.BACKGROUND_GLOW
             PianoRow.ColourChange -> LightsCopy.COLOUR_CHANGE
             PianoRow.BetweenPieces -> LightsCopy.BETWEEN_PIECES
+            PianoRow.Steps -> StepsCopy.FIND   // M83
             PianoRow.KeyForceNote -> return null
         }
         val path = listOfNotNull(group, page.title, section.fold?.title ?: section.title)
@@ -216,6 +219,9 @@ object SettingsIndex {
         LedColour.AMBIENT to listOf("ambient", "glow", "wash"),
         LedColour.FADE to listOf("fade", "transition", "color change"),
         LedRest.KEY to listOf("idle", "rest", "solid", "notes only", "between songs"),   // M81
+        // M83: the loudness steps (shown on a piano with firmware 2.1.5; elsewhere search leaves them out)
+        PianoSettings.STEPS_ANCHOR to listOf("calibrate", "calibration", "dynamics", "soft and hard", "microphone", "velocity steps"),
+        "velsteps" to listOf("loudness steps", "dynamics", "smooth", "velocity steps"),
         "ledcount" to listOf("LEDs", "length"),
         "dimsecs" to listOf("display", "dim"),
         "dimfloor" to listOf("display", "dim"),

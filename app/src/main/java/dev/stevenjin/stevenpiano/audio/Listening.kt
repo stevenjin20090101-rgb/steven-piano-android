@@ -51,6 +51,7 @@ sealed interface ListenAnswer {
         const val QUIET = "quiet"
         const val UPDATING = "updating"
         const val TESTING = "testing"
+        const val STEPS = "steps"   // M83: the loudness steps' calibration runs
     }
 }
 

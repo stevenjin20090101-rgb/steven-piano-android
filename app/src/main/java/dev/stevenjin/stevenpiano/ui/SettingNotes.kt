@@ -22,6 +22,8 @@ object SettingNotes {
         // Sound and touch › LOUDNESS
         "fullpower" to "Every note strikes at full strength",
         "volume" to "How loud the piano plays overall",
+        // Sound and touch › LOUDNESS STEPS (M83, firmware 2.1.5)
+        "velsteps" to "How many fixed strengths each note snaps to",
         // Fine tuning › TOUCH
         "velcurve" to "Shapes how loudness rises from soft to hard",
         "velmult" to "Scales every note's loudness up or down",

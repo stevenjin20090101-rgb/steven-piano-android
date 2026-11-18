@@ -51,6 +51,9 @@ object ListenCopy {
     const val UPDATING = "The piano is being updated. Try again once it has finished."
     const val TESTING = "Every key is being tested already."
 
+    /** M83: the loudness steps' calibration has the microphone and the keys. */
+    const val STEPS = "The loudness steps are being found. Try again once that has finished."
+
     /** The panel's card while listening is off on the tablet: what it is, and where to turn it on. */
     const val OFF_HOW = "Listening is off on the tablet. To hear the room, turn on Listening from the panel on the tablet: Piano › System."
 

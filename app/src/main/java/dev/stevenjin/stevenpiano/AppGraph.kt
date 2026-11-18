@@ -168,6 +168,7 @@ class AppGraph(private val app: Application) {
     internal val webWiring = WebWiring(this, app)
     internal val powerWiring = PowerWiring(this, app)
     internal val safetyWiring = SafetyWiring(this, app)
+    internal val stepsWiring = StepsWiring(this)   // M83: the loudness steps' calibration
 
     val library: LibraryRepository get() = libraryWiring.library
     val builtIns: BuiltInPlaylists get() = libraryWiring.builtIns
@@ -241,6 +242,10 @@ class AppGraph(private val app: Application) {
 
     val safety: SafetyRunner get() = safetyWiring.safety
     internal val keyTestRail: suspend () -> Boolean get() = safetyWiring.keyTestRail
+    internal val stepsRail: suspend () -> Boolean get() = safetyWiring.stepsRail   // M83
+
+    /** Find the loudness steps (M83, piano firmware 2.1.5): Piano › Sound and touch, and its full-screen card. */
+    val steps: dev.stevenjin.stevenpiano.audio.StepsCalibration get() = stepsWiring.steps
     private val safetyGate: StartGate get() = safetyWiring.safetyGate
     private fun startSafety() = safetyWiring.startSafety()
 

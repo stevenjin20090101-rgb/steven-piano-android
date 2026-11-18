@@ -49,6 +49,8 @@ enum class PianoFold(val page: PianoPage, val title: String) {
 enum class PianoSection(val page: PianoPage, val title: String?, val fold: PianoFold? = null) {
     Presets(PianoPage.Feel, "Presets"),
     Loudness(PianoPage.Feel, "Loudness"),
+    /** M83 (firmware 2.1.5): the steps' status, Find the loudness steps, and how many steps; only where the piano says `!stepsproto=1`. */
+    Steps(PianoPage.Feel, "Loudness steps"),
     Touch(PianoPage.Feel, "Touch", PianoFold.FineTuning),
     Timing(PianoPage.Feel, "Timing", PianoFold.FineTuning),
     Release(PianoPage.Feel, "Release", PianoFold.FineTuning),
@@ -200,6 +202,12 @@ sealed interface PianoRow {
     data object SaveNow : PianoRow
 
     /**
+     * LOUDNESS STEPS (M83, on a piano that says `!stepsproto=1`): the steps' status ("5 steps · 82 of 84 keys calibrated",
+     * or "Not calibrated yet") and **Find the loudness steps**.
+     */
+    data object Steps : PianoRow
+
+    /**
      * STRIP (M80, on a piano that says `!ledcolorproto=1`): where the strip's colour comes from, Album art, Custom or
      * Palette ([LedColourSource], the tablet's own choice), and with Album art what the loaded piece's cover gives.
      */
@@ -254,6 +262,8 @@ object PianoSettings {
         // SOUND AND TOUCH (PRESETS, the chips, comes first and holds no setting)
         PianoSetting("fullpower", "Full power", LOUDNESS, SettingKind.Switch),
         PianoSetting("volume", "Piano volume", LOUDNESS, SettingKind.Slider(0f, 100f), unit = "%"),
+        // M83, firmware 2.1.5: Smooth (0) or 2..8 fixed steps; its section shows only on a piano with the steps.
+        PianoSetting(LoudnessSteps.STEPS, "Steps", PianoSection.Steps, SettingKind.Stepper(0, LoudnessSteps.MOST, lowestOn = LoudnessSteps.LEAST), zero = "Smooth"),
         PianoSetting("velcurve", "Velocity curve", TOUCH, SettingKind.Slider(0.4f, 3.0f, step = 0.05f, decimals = 2)),
         PianoSetting("velmult", "Velocity multiplier", TOUCH, SettingKind.Slider(0.1f, 5.0f, step = 0.1f, decimals = 2)),
         PianoSetting("min", "White-key floor", TOUCH, SettingKind.Slider(0f, 4095f)),
@@ -325,15 +335,25 @@ object PianoSettings {
      * doesn't list (firmware 2.1.4 removed soft release's three).
      */
     fun listed(row: PianoRow, ready: PianoState.Ready?): Boolean {
+        if (row == PianoRow.Steps) return LoudnessSteps.supported(ready?.facts)   // M83: only where the piano has the steps
         val setting = (row as? PianoRow.Control)?.setting ?: return true
+        if (setting.section == PianoSection.Steps) return LoudnessSteps.supported(ready?.facts)
         return !setting.whenListed || ready?.values?.containsKey(setting.name) == true
     }
 
-    /** The [PianoSetting.whenListed] settings [state] doesn't list: hidden from the pages and from search. */
+    /**
+     * The [PianoSetting.whenListed] settings [state] doesn't list, and (M83) the loudness steps' rows on a piano without
+     * `!stepsproto=1`: hidden from the pages and from search, by their anchors.
+     */
     fun unlisted(state: PianoState?): Set<String> {
-        val values = (state as? PianoState.Ready)?.values
-        return all.filter { it.whenListed && values?.containsKey(it.name) != true }.map { it.name }.toSet()
+        val ready = state as? PianoState.Ready
+        val values = ready?.values
+        val gone = all.filter { it.whenListed && values?.containsKey(it.name) != true }.map { it.name }.toSet()
+        return if (LoudnessSteps.supported(ready?.facts)) gone else gone + inSection(PianoSection.Steps).map { it.name } + STEPS_ANCHOR
     }
+
+    /** Where search lands for Find the loudness steps (M83). */
+    const val STEPS_ANCHOR = "find-steps"
 
     /** The four feel presets, as the chip row of Feel's PRESETS. Each saves itself on the piano. */
     val presets: List<Preset> = listOf(
@@ -359,6 +379,7 @@ object PianoSettings {
     private val rowsBySection: Map<PianoSection, List<PianoRow>> = PianoSection.entries.associateWith { section ->
         buildList {
             if (section == PianoSection.Presets) add(PianoRow.Presets)
+            if (section == PianoSection.Steps) add(PianoRow.Steps)   // M83: the status and Find, above the steps' count
             facts.filter { it.section == section }.forEach { add(PianoRow.Reading(it)) }
             for (setting in inSection(section)) {
                 // M80: the colour's own rows come before the palette, which only Palette shows.

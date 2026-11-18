@@ -26,6 +26,7 @@ class PianoPagesTest {
     fun `every piano setting sits on one page, in one section, in the design's order`() {
         val expected = listOf(
             PianoSection.Loudness to listOf("fullpower", "volume"),
+            PianoSection.Steps to listOf("velsteps"),   // M83: only on a piano that says !stepsproto=1
             PianoSection.Touch to listOf("velcurve", "velmult", "min", "minblack", "max", "keyforce_white", "keyforce_black"),
             PianoSection.Timing to listOf("humanvel", "humantime", "burstgap", "burstboost", "minstrike", "isostrike", "isogap", "gap", "hold", "restrike"),
             PianoSection.Release to listOf("softrelease", "releasepwm", "releasems"),
@@ -43,7 +44,7 @@ class PianoPagesTest {
     @Test
     fun `each page's sections, in order, under their eyebrows, the folded ones behind the page's one disclosure`() {
         fun titles(page: PianoPage) = PianoSettings.sections(page).map { it.title }
-        assertEquals(listOf("Presets", "Loudness", "Touch", "Timing", "Release", "Drive", null), titles(PianoPage.Feel))
+        assertEquals(listOf("Presets", "Loudness", "Loudness steps", "Touch", "Timing", "Release", "Drive", null), titles(PianoPage.Feel))
         assertEquals(listOf("Strip", "Layout", "Motion", "The piano's screen"), titles(PianoPage.Lighting))
         assertEquals("one section needs no eyebrow", listOf(null), titles(PianoPage.Pedal))
         assertEquals(listOf("Firmware", "Status"), titles(PianoPage.Firmware))
