@@ -58,6 +58,7 @@ class LoudnessStepsTest {
         assertEquals(LoudnessSteps.Reply.Done, LoudnessSteps.read("velsteps 5", "  velsteps = 5: every note snaps to one of 5 fixed loudness steps"))
         assertEquals(LoudnessSteps.Reply.Other("velsteps out of range (0 or 2..8)"), LoudnessSteps.read("velsteps 5", "  velsteps out of range (0 or 2..8)"))
         assertEquals(LoudnessSteps.Reply.Done, LoudnessSteps.read("fullpower 0", "  fullpower = OFF — velocity-mapped PWM with min/max/velmult."))
+        assertEquals("Full power on is not off", LoudnessSteps.Reply.Other("fullpower = ON — every NoteOn drives FULL_ON. Max force, no hum, no velocity."), LoudnessSteps.read("fullpower 0", "  fullpower = ON — every NoteOn drives FULL_ON. Max force, no hum, no velocity."))
         assertEquals(LoudnessSteps.Reply.Done, LoudnessSteps.read("save", "[settings] saved to NVS"))
         assertEquals(LoudnessSteps.Reply.Other("[settings] save FAILED — could not open NVS RW"), LoudnessSteps.read("save", "[settings] save FAILED — could not open NVS RW"))
         assertTrue(LoudnessSteps.supported(mapOf("stepsproto" to "1")))

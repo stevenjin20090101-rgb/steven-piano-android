@@ -188,7 +188,7 @@ private fun Found(result: StepsResult, onDismiss: () -> Unit) {
     Title(StepsCopy.FOUND)
     val summary = StepsCopy.summary(result)
     Text(summary, Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleLarge.merge(Tabular), color = MaterialTheme.colorScheme.onSurface)
-    val uncalibrated = StepsCopy.uncalibrated(result.uncalibrated)
+    val uncalibrated = StepsCopy.uncalibrated(result.uncalibrated, result.tooLoud)
     Box(Modifier.padding(vertical = 12.dp)) {
         KeyMap(KeyTestState(results = KeyTest.KEYS.map { KeyResult(it, it !in result.uncalibrated) }), said = listOfNotNull(summary, uncalibrated).joinToString(". "))
     }

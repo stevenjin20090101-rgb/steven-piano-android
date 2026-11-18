@@ -110,11 +110,20 @@ class StepsCalibrationTest {
 
     private class Rig(val piano: Piano, val ears: FakeEars, val steps: StepsCalibration)
 
-    private fun TestScope.setUp(before: suspend () -> Boolean = { true }, noise: Double = NOISE): Rig {
+    /**
+     * The rig for [keys]: [hum] (a key and an amplitude) a steady tone at that key's pitch in the room; keys from
+     * [StepsCalibration.UNDAMPED_FROM] up ring on ([RING_S]), undamped, as the piano's top keys do.
+     */
+    private fun TestScope.setUp(
+        before: suspend () -> Boolean = { true },
+        noise: Double = NOISE,
+        keys: IntRange = KEYS,
+        hum: Pair<Int, Double>? = null,
+    ): Rig {
         val piano = Piano { testScheduler.currentTime }
         val ears = FakeEars()
-        val steps = StepsCalibration(backgroundScope, piano, ears, nanos = { testScheduler.currentTime * NANOS_PER_MS }, before = before, keys = KEYS)
-        room(piano, ears, noise)
+        val steps = StepsCalibration(backgroundScope, piano, ears, nanos = { testScheduler.currentTime * NANOS_PER_MS }, before = before, keys = keys)
+        room(piano, ears, noise, hum)
         return Rig(piano, ears, steps)
     }
 
@@ -122,21 +131,26 @@ class StepsCalibrationTest {
      * The room, a frame every 100 ms of virtual time while the microphone hears: a little noise and, for each strike, its
      * key's note at the loudness [loudness] gives it.
      */
-    private fun TestScope.room(piano: Piano, ears: FakeEars, noise: Double) = backgroundScope.launch {
+    private fun TestScope.room(piano: Piano, ears: FakeEars, noise: Double, hum: Pair<Int, Double>?) = backgroundScope.launch {
         var index = 0L
         val random = java.util.Random(5)
+        val humHz = hum?.let { KeyCheck.frequency(it.first) }
         while (true) {
             delay(FRAME_MS)
             val hear = ears.frames ?: continue
             val from = testScheduler.currentTime - FRAME_MS
-            val samples = DoubleArray(Microphone.FRAME) { random.nextGaussian() * noise }
+            val samples = DoubleArray(Microphone.FRAME) { n ->
+                val t = from / 1000.0 + n.toDouble() / Tones.RATE
+                random.nextGaussian() * noise + if (humHz != null) hum.second * kotlin.math.sin(2 * Math.PI * humHz * t) else 0.0
+            }
             for ((key, pwm, at) in piano.struck.toList()) {
-                if (from - at > 800) continue
+                val ring = if (key >= StepsCalibration.UNDAMPED_FROM) RING_S else 0.0
+                if (from - at > Tones.heardFor(ring) * 1000) continue
                 val db = loudness(key, pwm) ?: continue
                 val amplitude = 10.0.pow(db / 20.0) / NOTE_RMS
                 for (n in samples.indices) {
                     val since = (from - at) / 1000.0 + n.toDouble() / Tones.RATE
-                    if (since >= 0) samples[n] += Tones.note(key, since, amplitude = amplitude)
+                    if (since >= 0) samples[n] += Tones.note(key, since, amplitude = amplitude, ring = ring)
                 }
             }
             hear(MicFrame(Tones.pcm(samples), index, from * NANOS_PER_MS))
@@ -373,12 +387,48 @@ class StepsCalibrationTest {
         assertEquals(1, rig.piano.stops)
     }
 
+    @Test
+    fun `an undamped top key's ring is waited out before its next strike, 2 s at most, and a damped key's isn't (M83b)`() = runTest {
+        // E6 (88) has dampers; F6 (89) and up ring on.
+        val rig = setUp(keys = 88..89)
+        rig.steps.start()
+        advance(4 * 60_000)
+        val done = rig.steps.state.value
+        assertFalse(done.running)
+        assertTrue("it ran to its end: ${done.stopped}", done.result != null)
+        fun gaps(key: Int) = rig.piano.struck.filter { it.first == key }.map { it.third }.zipWithNext { a, b -> b - a }
+        val damped = gaps(88)
+        val undamped = gaps(89)
+        assertTrue("the damped key is paced at 310 ms: $damped", damped.all { it in 300L..400L })
+        assertTrue("the undamped key waits for its ring after a strike it heard: $undamped", undamped.count { it > 600 } >= 5)
+        assertTrue("never more than the 2 s cap and a strike's pace: $undamped", undamped.all { it <= StepsCalibration.RING_CAP_MS + 400 })
+        assertTrue("both calibrated", done.result!!.rows.keys == setOf(88, 89))
+    }
+
+    @Test
+    fun `a room too loud in one key's bands leaves that key uncalibrated, saying so, and the others calibrate (M83b)`() = runTest {
+        // A hum at D♯4's pitch, at -44 dB in its band: its strikes (-50 to -36 dB) never clear it by 10 dB.
+        val rig = setUp(hum = 63 to 0.009)
+        rig.steps.start()
+        advance(2 * 60_000)
+        val result = rig.steps.state.value.result
+        assertTrue("it ran to its end: ${rig.steps.state.value.stopped}", result != null)
+        assertTrue("63 left out: ${result!!.uncalibrated}", 63 in result.uncalibrated)
+        assertTrue("the room was too loud for it: ${result.tooLoud}", 63 in result.tooLoud)
+        assertTrue("60 calibrated as before", 60 in result.rows.keys)
+        assertFalse("62 never sounded: not the room's fault", 62 in result.tooLoud)
+        assertTrue(StepsCopy.uncalibrated(result.uncalibrated, result.tooLoud)!!.endsWith("The room was too loud for " + result.tooLoud.joinToString(", ") { dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry.name(it) } + "."))
+    }
+
     private companion object {
         val KEYS = 60..63
         const val FRAME_MS = 100L
         const val REPLY_MS = 30L
         const val NANOS_PER_MS = 1_000_000L
         const val NOISE = 0.0003
+
+        /** An undamped key's ring: down by e every 0.4 s from its strike. */
+        const val RING_S = 0.4
         const val SOFT_DB = -50.0
 
         /** [Tones.note]'s RMS for an amplitude of 1 (six harmonics falling as 1/n). */

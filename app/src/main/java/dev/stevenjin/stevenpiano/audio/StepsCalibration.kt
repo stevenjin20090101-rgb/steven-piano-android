@@ -25,8 +25,11 @@ import kotlinx.coroutines.launch
 /** Where a calibration stands: the 24 V coming up, the room heard, the keys struck, the steps written. */
 enum class StepsPhase { Rail, Room, Keys, Writing }
 
-/** A calibration that ran to its end: each calibrated key's [rows] (its PWMs), and the keys left [uncalibrated], low to high. */
-data class StepsResult(val rows: Map<Int, List<Int>>, val uncalibrated: List<Int>) {
+/**
+ * A calibration that ran to its end: each calibrated key's [rows] (its PWMs), and the keys left [uncalibrated], low to high;
+ * of those (M83b), the ones the room was [tooLoud] for (they sounded in their bands, never 10 dB clear of the room there).
+ */
+data class StepsResult(val rows: Map<Int, List<Int>>, val uncalibrated: List<Int>, val tooLoud: List<Int> = emptyList()) {
     /** How many keys got each number of steps. */
     val counts: Map<Int, Int> get() = rows.values.groupingBy { it.size }.eachCount()
 
@@ -65,10 +68,14 @@ data class StepsState(
  *   app isn't in front (the microphone needs it), the key test or the safety check has the microphone, or the power plug
  *   can't be trusted; and on a piano without `!stepsproto=1`, or that doesn't let this tablet write. Then [before] (the 24 V
  *   wanted with a reason of its own, awaited up), and the microphone with its banner, the tablet's own piano sound silent.
- * - **The room**: its noise for [ROOM_MS]; louder than [ROOM_TOO_LOUD_DB], it says so and stops.
+ * - **The room**: its noise for [ROOM_MS], broadband (louder than [ROOM_TOO_LOUD_DB], the outer sanity stop: it says so
+ *   and stops) and (M83b) in each key's own bands, which each key's strikes must clear by 10 dB ([StepsTake.rooms]).
  * - **Each key**: the coarse look, one strike per level ([StepPicker.COARSE]); then a finer look, two strikes each 100 apart,
  *   below where it first cleared the room and below where it stopped getting louder. One `calstrike` every [STRIKE_EVERY_MS]
- *   (the firmware allows one every 300 ms); on "too soon" it waits and sends it again. About 9 to 10 minutes in all.
+ *   (the firmware allows one every 300 ms); on "too soon" it waits and sends it again. M83b: each strike is heard in its
+ *   key's bands, 20 to 100 ms after the reply ([StepsTake]), so a click alone is not a strike; and on an undamped top key
+ *   ([UNDAMPED_FROM] up, which rings on after release) the next strike waits for its band to die back near the room's
+ *   there, [RING_CAP_MS] at most. About 10 to 12 minutes in all.
  * - **Writing only at the end**: every key done, the uncalibrated keys' old rows cleared, one `steptable` per calibrated
  *   key, then `velsteps N` (the longest row), `fullpower 0` and `save`, each answered before the next; then the piano is
  *   read again. Stopped before, nothing is written.
@@ -149,7 +156,11 @@ class StepsCalibration(
 
     /** The last strike that went, and the first (`nanos`), and how many have gone: the pace, and the time left. */
     private var lastStrikeAt: Long? = null
+    private var lastRepliedAt: Long? = null
     private var firstStrikeAt: Long? = null
+
+    /** M83b: each key's in-band level at rest, dB ([StepsTake.rooms]). */
+    private var rooms: Map<Int, Double> = emptyMap()
     private var strikes = 0
 
     /** What has changed on the piano so far (rows cleared or written), and whether Full power went off. */
@@ -166,7 +177,9 @@ class StepsCalibration(
         tapped = true
         piano.muteTablet(true)
         lastStrikeAt = null
+        lastRepliedAt = null
         firstStrikeAt = null
+        rooms = emptyMap()
         strikes = 0
         written = 0
         fullPowerOff = false
@@ -229,18 +242,19 @@ class StepsCalibration(
         val roomTo = nanos()
         val room = heard { take.room(roomFrom, roomTo) } ?: return end(StepsCopy.STOPPED_MICROPHONE)
         if (room > ROOM_TOO_LOUD_DB) return end(StepsCopy.TOO_LOUD)
+        rooms = heard { take.rooms(roomFrom, roomTo, keys) } ?: return end(StepsCopy.STOPPED_MICROPHONE)
 
         // Each key, low to high.
         _state.update { it.copy(phase = StepsPhase.Keys) }
         for ((i, key) in keys.withIndex()) {
             _state.update { it.copy(key = key, number = i + 1, progress = i.toFloat() / total, leftMs = estimate(i, 0)) }
-            if (!sweep(take, key, i, room)) return
+            if (!sweep(take, key, i, rooms.getValue(key))) return
         }
         heard { if (take.unmeasured() == 0) true else null } ?: return end(StepsCopy.STOPPED_MICROPHONE)
         listenNoMore()
 
         val levels = take.levels().groupBy { it.key }
-        val picks = keys.map { key -> StepPicker.pick(key, levels[key].orEmpty().map { StrikeLevel(it.pwm, it.db) }, room) }
+        val picks = keys.map { key -> StepPicker.pick(key, levels[key].orEmpty().map { StrikeLevel(it.pwm, it.db) }, rooms.getValue(key)) }
         write(picks)
     }
 
@@ -311,6 +325,7 @@ class StepsCalibration(
                 val wait = last + STRIKE_EVERY_MS * NANOS_PER_MS - nanos()
                 if (wait > 0) delay((wait + NANOS_PER_MS - 1) / NANOS_PER_MS)
             }
+            if (key >= UNDAMPED_FROM && !ringDown(take, key)) return false
             interruption()?.let {
                 end(it)
                 return false
@@ -324,10 +339,12 @@ class StepsCalibration(
                     return false
                 }
                 is LoudnessSteps.Reply.Struck -> {
+                    val replied = nanos()
                     lastStrikeAt = at
+                    lastRepliedAt = replied
                     if (firstStrikeAt == null) firstStrikeAt = at
                     strikes++
-                    take.strike(key, pwm, at)
+                    take.strike(key, pwm, replied)   // M83b: heard from its reply on
                     return true
                 }
                 LoudnessSteps.Reply.TooSoon -> {
@@ -349,6 +366,29 @@ class StepsCalibration(
         }
     }
 
+    /**
+     * M83b: an undamped key ([UNDAMPED_FROM] up) rings on after release, so before its next strike its band must have died
+     * back within [NEAR_ROOM_DB] of the room's there (in a stretch heard after the last strike's window), or [RING_CAP_MS]
+     * have passed since that strike's reply. False when it ended meanwhile.
+     */
+    private suspend fun ringDown(take: StepsTake, key: Int): Boolean {
+        val last = lastRepliedAt ?: return true
+        val room = rooms[key] ?: return true
+        val fresh = last + (StepsTake.TO_MS + StepsTake.NOW_MS) * NANOS_PER_MS
+        val cap = last + RING_CAP_MS * NANOS_PER_MS
+        while (nanos() < cap) {
+            val now = take.bandNow(key)
+            if (now != null && now.second >= fresh && now.first <= room + NEAR_ROOM_DB) return true
+            if (!running) return false
+            interruption()?.let {
+                end(it)
+                return false
+            }
+            delay(PROBE_MS)
+        }
+        return true
+    }
+
     /** Every key done: the uncalibrated keys' rows cleared, a row per calibrated key, then `velsteps`, `fullpower 0`, `save`. */
     private suspend fun write(picks: List<KeySteps>) {
         val rows = picks.mapNotNull { pick -> pick.pwms?.let { pick.key to it } }.toMap()
@@ -363,7 +403,7 @@ class StepsCalibration(
             if (!say(LoudnessSteps.row(key, pwms))) return
             written++
         }
-        val result = StepsResult(rows, uncalibrated)
+        val result = StepsResult(rows, uncalibrated, picks.filter { it.why == Unheard.ROOM_LOUD }.map { it.key })
         if (!say(LoudnessSteps.steps(result.longest))) return
         if (!say(LoudnessSteps.FULL_POWER_OFF)) return
         fullPowerOff = true
@@ -427,7 +467,9 @@ class StepsCalibration(
         val first = firstStrikeAt
         val pace = if (first != null && strikes >= PACE_AFTER) (nanos() - first) / NANOS_PER_MS / (strikes - 1).coerceAtLeast(1) else STRIKE_EVERY_MS + PACE_SLACK_MS
         val left = (total - index - 1).toLong() * PER_KEY + (PER_KEY - struck).coerceAtLeast(0)
-        return left * pace + WRITE_MS
+        // M83b: the undamped keys still to come wait for their rings, about a second a strike.
+        val undamped = keys.drop(index).count { it >= UNDAMPED_FROM }.toLong() * PER_KEY
+        return left * pace + undamped * UNDAMPED_EXTRA_MS + WRITE_MS
     }
 
     /** The microphone is done with: untapped, the tablet's sound let be. */
@@ -483,6 +525,16 @@ class StepsCalibration(
 
         /** A key whose floor shows only after its loudest strike waits this long before its soft ones. */
         const val SETTLE_MS = 1_000L
+
+        /**
+         * M83b: the undamped top keys, F6 (89) and up, ring on after release: each strike waits for the last one's ring to
+         * die back within [NEAR_ROOM_DB] of the room's in-band level, [RING_CAP_MS] at most after its reply; about
+         * [UNDAMPED_EXTRA_MS] a strike, for the time left.
+         */
+        const val UNDAMPED_FROM = 89
+        const val NEAR_ROOM_DB = 3.0
+        const val RING_CAP_MS = 2_000L
+        const val UNDAMPED_EXTRA_MS = 1_000L
 
         /** About how long the writing takes, for the time left. */
         const val WRITE_MS = 5_000L

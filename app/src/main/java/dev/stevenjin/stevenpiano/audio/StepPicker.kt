@@ -26,6 +26,12 @@ enum class Unheard {
 
     /** Its window, floor to top, is under one step's gap: fewer than 2 steps fit. */
     NARROW,
+
+    /**
+     * M83b: it sounded in its bands, but never 10 dB clear of the room's level there at rest: the room was too loud for it
+     * (its in-band level within the margin of its softest usable strike).
+     */
+    ROOM_LOUD,
 }
 
 /**
@@ -58,6 +64,9 @@ object StepPicker {
 
     /** Neighbouring steps at least this far apart (Steven's multiple-choice answer). */
     const val GAP_DB = 4.0
+
+    /** M83b: a key whose strikes rose this far over the room in its bands, but never cleared the margin: the room's fault. */
+    const val ROSE_DB = 3.0
 
     /**
      * The coarse level where the key first clears the room ([room] dB) by the margin, and the next one does too (one stray
@@ -105,7 +114,7 @@ object StepPicker {
      * notes. Uncalibrated, saying why, when no strike clears the room or fewer than 2 steps fit.
      */
     fun pick(key: Int, strikes: List<StrikeLevel>, room: Double): KeySteps {
-        val floorPwm = floorOf(strikes, room) ?: return KeySteps(key, null, Unheard.NOT_HEARD)
+        val floorPwm = floorOf(strikes, room) ?: return KeySteps(key, null, if (strikes.any { it.db >= room + ROSE_DB }) Unheard.ROOM_LOUD else Unheard.NOT_HEARD)
         val points = fit(strikes.filter { it.pwm >= floorPwm }) ?: return KeySteps(key, null, Unheard.NOT_HEARD)
         val low = points.first().second
         val loudest = points.last().second
