@@ -310,3 +310,36 @@ object SchemaV7 {
 
     private val MERGED = setOf(PlaylistNames.POP, PlaylistNames.MIDI)
 }
+
+/**
+ * Schema v7 (apps 1.37 to 1.46) to v8 (M82): every piece gets room for the measures the Library's sorts read, nine columns
+ * added as Room's own auto-migrations add a nullable one ([SchemaV8.COLUMNS], as Room generated them in `schemas/…/8.json`;
+ * SchemaV8Test holds the two equal): five from its notes, worked out by the backfill in the background (`data.sort`), and
+ * the world-popularity lookup's rank, when it ran, what it looked up and whether the album it matched is on a Disney label
+ * (the Disney section). Every one is null until then; no row is rewritten
+ * and nothing else is touched. Runs inside Room's migration transaction.
+ */
+val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        SchemaV8.STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/** Schema v8's statements: the nine columns as Room generated them in `8.json`, in its order. Pure: unit-tested. */
+object SchemaV8 {
+    /** The new `pieces` columns, exactly as 8.json's createSql for the table declares them, in order. */
+    val COLUMNS: List<String> = listOf(
+        "`busiestPerSecond` REAL",
+        "`mostKeys` INTEGER",
+        "`mostKeysMoments` INTEGER",
+        "`leapsPerSecond` REAL",
+        "`keyRange` INTEGER",
+        "`worldRank` INTEGER",
+        "`worldRankAt` INTEGER",
+        "`worldRankKey` TEXT",
+        "`disneyLabel` INTEGER",
+    )
+
+    /** The migration's statements, in order: one ALTER for each column. */
+    val STATEMENTS: List<String> = COLUMNS.map { "ALTER TABLE `pieces` ADD COLUMN $it" }
+}

@@ -191,8 +191,33 @@ interface PieceDao {
     @Query("UPDATE pieces SET favorite = :favorite WHERE id = :id")
     suspend fun setFavorite(id: Long, favorite: Boolean)
 
-    @Query("UPDATE pieces SET playCount = playCount + 1, lastPlayedAt = :at WHERE id = :id")
+    /** Piece [id] started at [at] (Recent and Recently played read it). M82: no longer a play counted; [countPlay] is. */
+    @Query("UPDATE pieces SET lastPlayedAt = :at WHERE id = :id")
     suspend fun markPlayed(id: Long, at: Long)
+
+    /** M82: piece [id] played: to its end, or it sounded 30 s (`data.sort.Plays`). */
+    @Query("UPDATE pieces SET playCount = playCount + 1 WHERE id = :id")
+    suspend fun countPlay(id: Long)
+
+    /** M82: every piece's measures, for the Hardest and Popular sorts, which rank a piece against the whole library. */
+    @Query("SELECT busiestPerSecond, mostKeys, leapsPerSecond, keyRange, worldRank FROM pieces")
+    fun measures(): Flow<List<PieceMeasure>>
+
+    /** M82: the first [limit] pieces whose measures are still to be worked out (the backfill's), oldest first. */
+    @Query("SELECT id, fileName FROM pieces WHERE mostKeys IS NULL ORDER BY id LIMIT :limit")
+    suspend fun statsCandidates(limit: Int): List<StatsCandidate>
+
+    /** M82: piece [id]'s measures from its notes ([PieceSql.SET_STATS]); all null: to be measured again. */
+    @Query(PieceSql.SET_STATS)
+    suspend fun setStats(id: Long, busiest: Double?, mostKeys: Int?, moments: Int?, leaps: Double?, range: Int?)
+
+    /** M82: the pieces whose world popularity is still to be looked up, after [after], by id ([PieceSql.RANK_CANDIDATES]). */
+    @Query(PieceSql.RANK_CANDIDATES)
+    suspend fun rankCandidates(after: Long, limit: Int): List<RankCandidate>
+
+    /** M82: the lookup's answer for piece [id] ([PieceSql.SET_RANK]): 1, or 0 when it is gone or was renamed meanwhile. */
+    @Query(PieceSql.SET_RANK)
+    suspend fun setRank(id: Long, rank: Int?, disney: Boolean?, at: Long, key: String): Int
 
     @Query("DELETE FROM pieces WHERE id = :id")
     suspend fun delete(id: Long)

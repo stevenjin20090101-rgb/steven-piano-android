@@ -22,7 +22,9 @@ import dev.stevenjin.stevenpiano.data.imports.ComposerNames
  * composers (the folded surname, "" when unknown), [composerShort] is what rows show,
  * [titleKey] sorts, [searchText] is what search matches, [genre] is Classical or Modern
  * (`Genres`; none for a piece made on the tablet; new in schema v5, `MIGRATION_4_5`). [appleGenre] is a Modern piece's
- * genre as Apple's catalogue names it (new in schema v7, `MIGRATION_6_7`).
+ * genre as Apple's catalogue names it (new in schema v7, `MIGRATION_6_7`). The measures from [busiestPerSecond] to
+ * [disneyLabel] are what the Library's sorts and its Disney section read (M82, schema v8, `MIGRATION_7_8`). [playCount] counts the times it
+ * played to its end or sounded 30 s (M82; before, every start and restart did); [lastPlayedAt] is when it last started.
  */
 @Entity(
     tableName = "pieces",
@@ -57,7 +59,50 @@ data class PieceEntity(
      * Modern piece gets one (never a Classical one, nor one made here); kept the first time, never changed by a lookup again.
      */
     val appleGenre: String? = null,
+    // M82 (schema v8, `MIGRATION_7_8`): the measures the Library's sorts read. The first five are worked out from the
+    // piece's notes (`data.sort.PieceStats`: at import, on a new version's file, and once by the backfill for the pieces
+    // already there); all null until then, and written together.
+    /** Note-ons a second in the piece's busiest 10 s. */
+    val busiestPerSecond: Double? = null,
+    /** The most keys held down together (note-on to note-off, the pedal ignored). */
+    val mostKeys: Int? = null,
+    /** How many separate moments reach [mostKeys]: what breaks a tie. */
+    val mostKeysMoments: Int? = null,
+    /** Semitones a second leapt (more than 7 semitones between consecutive onsets) in the busiest 10 s. */
+    val leapsPerSecond: Double? = null,
+    /** The highest key minus the lowest, in semitones. */
+    val keyRange: Int? = null,
+    /** Deezer's `rank` of the track the world-popularity lookup matched; null when it matched none, or before it ran. */
+    val worldRank: Int? = null,
+    /** When the lookup ran (the clock's ms); null: never. */
+    val worldRankAt: Long? = null,
+    /** What it looked up, `titleKey|composerKey`: a piece renamed since is looked up again ([PieceDao.rankCandidates]). */
+    val worldRankKey: String? = null,
+    /**
+     * Whether the album of the Modern song the lookup matched is on a Disney label ("Walt Disney Records"): the Library's
+     * Disney section (M82), beside its own list (`data.builtin.DisneySongs`). Null: no album asked (none matched, a
+     * Classical piece, or the lookup has not run); asked once, with the rank.
+     */
+    val disneyLabel: Boolean? = null,
 )
+
+/** A piece's measures, as every piece's are read for the Hardest and Popular sorts (M82): [PieceDao.measures]. */
+data class PieceMeasure(
+    val busiestPerSecond: Double?,
+    val mostKeys: Int?,
+    val leapsPerSecond: Double?,
+    val keyRange: Int?,
+    val worldRank: Int?,
+)
+
+/** A piece whose measures are still to be worked out (M82): its file. [PieceDao.statsCandidates]. */
+data class StatsCandidate(val id: Long, val fileName: String)
+
+/**
+ * A piece whose world popularity is still to be looked up (M82): what the lookup sends (its title and the name rows show,
+ * as the album-cover lookup does), its genre, and the key its answer is kept under. [PieceDao.rankCandidates].
+ */
+data class RankCandidate(val id: Long, val title: String, val composerShort: String, val genre: Int, val rankKey: String)
 
 /** What a queue or a list needs to name a piece without loading all of it. */
 data class PieceSummary(val id: Long, val title: String, val composerShort: String, val durationMs: Long, val composerKey: String)
@@ -85,6 +130,27 @@ object PieceSql {
      */
     const val REPLACE_FILE = "UPDATE OR IGNORE pieces SET sha256 = :sha256, fileName = :fileName, sourceName = :sourceName, " +
         "sizeBytes = :sizeBytes, durationMs = :durationMs, noteCount = :noteCount WHERE id = :id"
+
+    /** M82: what a piece's world popularity is kept under, its title's and its name's keys: a rename asks again. */
+    const val RANK_KEY = "titleKey || '|' || composerKey"
+
+    /** M82: piece :id's five measures from its notes (`data.sort.PieceStats`), together. */
+    const val SET_STATS = "UPDATE pieces SET busiestPerSecond = :busiest, mostKeys = :mostKeys, mostKeysMoments = :moments, " +
+        "leapsPerSecond = :leaps, keyRange = :range WHERE id = :id"
+
+    /**
+     * M82: the world-popularity lookup's answer for piece :id (:rank, null for no match; :disney, its album on a Disney
+     * label, null when none was asked), when it ran, and what it looked up (:key); written only while the piece is still named as it was looked up, so a rename meanwhile is asked again.
+     */
+    const val SET_RANK = "UPDATE pieces SET worldRank = :rank, worldRankAt = :at, worldRankKey = :key, disneyLabel = :disney " +
+        "WHERE id = :id AND $RANK_KEY = :key"
+
+    /**
+     * M82: the pieces after :after (by id, at most :limit) whose world popularity is still to be looked up: Classical or
+     * Modern (never one made here), never looked up, or renamed since ([RANK_KEY]).
+     */
+    const val RANK_CANDIDATES = "SELECT id, title, composerShort, genre, $RANK_KEY AS rankKey FROM pieces " +
+        "WHERE genre IN (1, 2) AND id > :after AND (worldRankKey IS NULL OR worldRankKey != $RANK_KEY) ORDER BY id LIMIT :limit"
 }
 
 /**
