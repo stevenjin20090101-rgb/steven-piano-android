@@ -1321,8 +1321,13 @@ class RailKeeper(
         log("Power watch: idle ${PowerWatch.watts(idle)} W at rail-up")
     }
 
-    /** A piece plays (its want holds): the floor watch reads only then. */
-    private fun pieceNow(): Boolean = wants[PLAY]?.let { live(it, now()) } == true
+    /**
+     * A piece plays (its want holds): the floor watch reads only then. M83's one hook: the loudness steps' calibration
+     * ([STEPS]) is watched as a piece is, its `calstrike`s counted as keys held ([HeldKeys.struckOutside]), so for its 10
+     * minutes of PWM strikes the stuck-board rule, `!i2cfails` every 5 s and the plug's check still run, and the check after
+     * it comes as after a piece (between strikes the idle watch would only ever see a key just struck, and look away).
+     */
+    private fun pieceNow(): Boolean = WATCHED_AS_PIECES.any { reason -> wants[reason]?.let { live(it, now()) } == true }
 
     /**
      * The power watch's look while the rail is up (v1.30 — M67; every second since v1.39 — M76): the rail-up's `!i2cfails`
@@ -2028,6 +2033,10 @@ class RailKeeper(
         const val HOURS = "hours"
         const val GRACE = "grace"
         const val UPDATE_WAKE = "updatewake"
+
+        /** M83: the loudness steps' calibration, its own reason; watched as a piece is ([pieceNow]). */
+        const val STEPS = "steps"
+        private val WATCHED_AS_PIECES = listOf(PLAY, STEPS)
 
         private const val MINUTE_MS = 60_000L
         private const val MS_PER_S = 1_000L

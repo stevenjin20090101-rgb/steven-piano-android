@@ -83,6 +83,9 @@ class KeyTest(
 
         /** The tablet's own piano sound held silent ([on]), or let be again. */
         fun muteTablet(on: Boolean)
+
+        /** M83: the loudness steps' calibration runs (it has the microphone, and strikes the keys itself). */
+        fun calibrating(): Boolean = false
     }
 
     private val _state = MutableStateFlow(KeyTestState())
@@ -123,6 +126,7 @@ class KeyTest(
         if (piano.playing) return ListenAnswer.Refused(ListenAnswer.PLAYING, ListenCopy.PLAYING)
         piano.quiet()?.let { return ListenAnswer.Refused(ListenAnswer.QUIET, it) }
         if (piano.updating) return ListenAnswer.Refused(ListenAnswer.UPDATING, ListenCopy.UPDATING)
+        if (piano.calibrating()) return ListenAnswer.Refused(ListenAnswer.STEPS, ListenCopy.STEPS)
         return null
     }
 

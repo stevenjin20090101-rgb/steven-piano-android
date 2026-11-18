@@ -46,6 +46,7 @@ import dev.stevenjin.stevenpiano.R
 import dev.stevenjin.stevenpiano.graph
 import dev.stevenjin.stevenpiano.ui.ListenCopy
 import dev.stevenjin.stevenpiano.ui.SafetyCopy
+import dev.stevenjin.stevenpiano.ui.StepsCopy
 import dev.stevenjin.stevenpiano.ui.theme.Motion
 import dev.stevenjin.stevenpiano.ui.theme.rememberReducedMotion
 
@@ -61,6 +62,7 @@ fun MicrophoneBanner(modifier: Modifier = Modifier) {
     val graph = LocalContext.current.graph
     val listen by graph.remote.listening.state.collectAsStateWithLifecycle()
     val safety by graph.safety.state.collectAsStateWithLifecycle()
+    val steps by graph.steps.state.collectAsStateWithLifecycle()   // M83
     val reduced = rememberReducedMotion()
     AnimatedVisibility(
         visible = listen.on,
@@ -91,6 +93,7 @@ fun MicrophoneBanner(modifier: Modifier = Modifier) {
                     when {
                         listen.panel -> ListenCopy.BANNER_PANEL
                         safety.running -> SafetyCopy.BANNER
+                        steps.running -> StepsCopy.BANNER
                         else -> ListenCopy.BANNER_TEST
                     },
                     Modifier.weight(1f, fill = false),

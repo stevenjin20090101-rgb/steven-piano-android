@@ -13,6 +13,7 @@ import dev.stevenjin.stevenpiano.ble.EmulatedConsole
 import dev.stevenjin.stevenpiano.ble.FakeConsole
 import dev.stevenjin.stevenpiano.ble.FakePianoLink
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
@@ -604,5 +605,78 @@ class PianoSettingsRepositoryTest {
         val after = console.sent.dropWhile { it != "soft" }
         assertEquals(listOf("soft", "volume 100", "fullpower 1", "save"), after.take(4))
         assertEquals("1", repo.ready().values["fullpower"])
+    }
+
+    // ---- M83: the loudness steps' calibration, and Full power after it (firmware 2.1.5) ------------------------------
+
+    @Test
+    fun `the calibration's lines go and their own replies come back word for word, never a setting's error (M83)`() = runTest {
+        val repo = connected()
+        assertEquals("calstrike 60 at 2400: struck for 100 ms", repo.converse("calstrike 60 2400"))
+        assertEquals("the piano's own 300 ms", "calstrike refused: too soon (one every 300 ms)", repo.converse("calstrike 61 2400"))
+        assertEquals("steptable 60 = 3 steps (saved by save or the auto-save)", repo.converse("steptable 60 1200 1700 2600"))
+        assertEquals("steptable 61 cleared", repo.converse("steptable 61 clear"))
+        assertEquals("velsteps = 5: every note snaps to one of 5 fixed loudness steps (shows once fullpower is 0)", repo.converse("velsteps 5"))
+        assertNull("a refusal is the calibration's alone", repo.ready().lastError)
+        assertNull("nothing but its own lines", repo.converse("ledbright 40"))
+        assertFalse("ledbright 40" in console.sent)
+        assertEquals("[settings] saved to NVS", repo.converse("save"))
+        assertEquals(listOf(false), listOf(chosenOff))
+    }
+
+    @Test
+    fun `fullpower 0 from the calibration is recorded as chosen off, and nothing turns Full power back on (M83)`() = runTest {
+        val repo = connected()
+        assertEquals("fullpower = OFF", repo.converse("fullpower 0"))
+        assertEquals("recorded as the guard's choice", listOf(false), choices)
+        repo.reread()
+        settle()
+        assertEquals("0", repo.ready().values["fullpower"])
+        assertFalse("never turned back on", "fullpower 1" in console.sent)
+        // A preset never changes Full power: Snappy turns it on at the piano, and it goes off again, saved.
+        console.clearSent()
+        repo.preset("snappy")
+        settle()
+        assertEquals(listOf("snappy", "fullpower 0", "save"), console.sent.take(3))
+        assertEquals("0", repo.ready().values["fullpower"])
+        // The piano's volume and a channel's go as they are: they never change Full power.
+        console.clearSent()
+        repo.set("volume", 55)
+        settle()
+        repo.holdTemporarily("volume", 70)
+        settle()
+        assertTrue("${console.sent}", console.sent.containsAll(listOf("volume 55", "volume 70")))
+        assertFalse(console.sent.any { it.startsWith("fullpower") })
+        assertEquals("0", repo.ready().values["fullpower"])
+        // A person can still switch it on, which overrides the steps.
+        repo.set("fullpower", true)
+        settle()
+        assertEquals(listOf(false, true), choices)
+        assertEquals("1", repo.ready().values["fullpower"])
+    }
+
+    @Test
+    fun `a calibration line unanswered when the link drops comes back empty at once, not after its wait (M83)`() = runTest {
+        val silent = FakeConsole { line -> if (line.startsWith("calstrike")) emptyList() else piano.handle(line) }
+        val repo = connected(silent)
+        val reply = async { repo.converse("calstrike 60 2400") }
+        advanceTimeBy(100)
+        runCurrent()
+        link.drop()
+        runCurrent()
+        assertTrue(reply.isCompleted)
+        assertNull(reply.await())
+        assertTrue("at once", currentTime < 1_000)
+        assertNull("no piano, nothing sent", repo.converse("calstrike 60 2400"))
+    }
+
+    @Test
+    fun `a refused fullpower 0 records nothing, and Full power stays on (M83)`() = runTest {
+        val locked = FakeConsole { line -> if (line == "fullpower 0") listOf("  refused — not authorised (send auth first)") else piano.handle(line) }
+        val repo = connected(locked)
+        assertEquals("refused — not authorised (send auth first)", repo.converse("fullpower 0"))
+        assertTrue(choices.isEmpty())
+        assertFalse(chosenOff)
+        assertNull("the calibration's, not the page's", repo.ready().lastError)
     }
 }

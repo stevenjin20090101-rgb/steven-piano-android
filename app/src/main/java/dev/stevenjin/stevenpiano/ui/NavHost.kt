@@ -130,6 +130,7 @@ import dev.stevenjin.stevenpiano.ui.components.MicrophoneBanner
 import dev.stevenjin.stevenpiano.ui.components.MiniPlayer
 import dev.stevenjin.stevenpiano.ui.components.ProgressHairline
 import dev.stevenjin.stevenpiano.ui.components.SafetyCheckCard
+import dev.stevenjin.stevenpiano.ui.components.StepsCard
 import dev.stevenjin.stevenpiano.ui.components.hazeSource
 import dev.stevenjin.stevenpiano.ui.components.miniPlayerShown
 import dev.stevenjin.stevenpiano.ui.components.rememberBackdrop
@@ -368,6 +369,8 @@ fun PianoNavHost(
             // The safety check (v1.26 — M61): a full-screen card over every screen, the resting screen too, while a check
             // runs and while Play is locked.
             SafetyCheckCard()
+            // M83: Find the loudness steps, a full-screen card while it runs and until its end is read; under the banner.
+            StepsCard()
             // While the microphone is on (v1.23 — M55): on every screen, the resting screen too, with Stop; above the
             // safety check's card, whose sweep it announces ("Microphone on · safety check").
             MicrophoneBanner(Modifier.align(Alignment.TopCenter))

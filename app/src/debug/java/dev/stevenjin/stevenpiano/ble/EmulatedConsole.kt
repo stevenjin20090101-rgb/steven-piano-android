@@ -27,12 +27,20 @@ import java.util.Locale
  * With [ledRest] too (M81, firmware 2.1.3, the default) it has the strip at rest: `ledrest` after `ledambient`, exactly `0`
  * or `1` ("usage: ledrest 0|1" otherwise), never kept by `save`, back to 0 when the link that set it drops
  * ([linkDropped]), and `!ledrestproto=1` after `!ledcolorproto=1`. Without (2.1.2), neither.
+ * With [steps] too (M83, firmware 2.1.5, the default) it has the distinct loudness steps (BLE_SETTINGS.md › "Distinct
+ * loudness steps"): `velsteps` after `velcurve` (stock 5), `steptable` and `calstrike` with the firmware's replies and
+ * refusals word for word, one `calstrike` every 300 ms across all keys ([now]'s clock), refused on a key whose board doesn't
+ * answer (the 24 V off) and while a firmware update runs ([updating]); and `!stepsproto=1`, `!stepkeys` after
+ * `!ledrestproto=1`. Without (2.1.4), none of it.
  */
 class EmulatedConsole(
     facts: Map<String, String> = DEFAULT_FACTS,
     var lock: EmulatedLock? = null,
     var ledColour: Boolean = true,
     var ledRest: Boolean = true,
+    var steps: Boolean = true,
+    /** The piano's millis() for `calstrike`'s 300 ms. */
+    private val now: () -> Long = { System.nanoTime() / NANOS_PER_MS },
 ) {
     private val facts = LinkedHashMap(facts)
     private val values = LinkedHashMap<String, String>().apply { TUNABLES.forEach { put(it.name, it.default) } }
@@ -42,6 +50,13 @@ class EmulatedConsole(
      * is up; null, the default, while no fake plug feeds it, and `!boards` is the facts' own, as before.
      */
     var railBoards: () -> String? = { null }
+
+    /** Whether a firmware update runs now (M83: `calstrike`, which drives a coil, is refused meanwhile). */
+    var updating: () -> Boolean = { false }
+
+    /** M83, firmware 2.1.5: each calibrated key's row, and when the last `calstrike` struck (the piano's ms). */
+    private val rows = sortedMapOf<Int, List<Int>>()
+    private var lastStrikeMs: Long? = null
 
     /** A new connection (the lock's trust and nonce are each connection's own). */
     fun connected() {
@@ -82,6 +97,8 @@ class EmulatedConsole(
             name == "ledtest" -> ledTest(argument)
             name == "testmin" || name == "testmax" -> strikeTest(name == "testmax", argument)
             name == "note" -> emptyList()
+            name == "calstrike" && stepsHere() -> calStrike(command)   // M83, firmware 2.1.5
+            name == "steptable" && stepsHere() -> stepTable(command)
             name in SOFT_RELEASE && argument.isNotEmpty() -> listOf("  unknown — soft release was removed in 2.1.4 (every key-up is a plain cut)")
             argument.isNotEmpty() && (name in values || name == "minwhite") && has(name) ->
                 set(if (name == "minwhite") "min" else name, argument)
@@ -96,6 +113,8 @@ class EmulatedConsole(
         if (fact == BOARDS) railBoards()?.let { return it }
         if (fact == LED_COLOR_PROTO && ledColour) return "1"
         if (fact == LED_REST_PROTO && restsHere()) return "1"
+        if (fact == STEPS_PROTO && stepsHere()) return "1"   // M83
+        if (fact == STEP_KEYS && stepsHere()) return rows.size.toString()
         return facts[fact] ?: lock?.fact(fact)
     }
 
@@ -104,17 +123,82 @@ class EmulatedConsole(
             lock?.facts().orEmpty().map { (name, value) -> "!$name=$value" } +
             (if (ledColour) listOf("!$LED_COLOR_PROTO=1") else emptyList()) +
             (if (restsHere()) listOf("!$LED_REST_PROTO=1") else emptyList()) +
+            (if (stepsHere()) listOf("!$STEPS_PROTO=1", "!$STEP_KEYS=${rows.size}") else emptyList()) +
             values.filterKeys(::has).map { (name, value) -> "$name=$value" } + "end"
 
     /** Whether this piano has [name]: the LED colour's keys from 2.1.2 ([ledColour]), `ledrest` from 2.1.3 ([ledRest]). */
     private fun has(name: String): Boolean = when (name) {
         LED_REST -> restsHere()
+        VEL_STEPS -> stepsHere()
         in LED_COLOUR -> ledColour
         else -> true
     }
 
     /** 2.1.3 has the strip's colour too. */
     private fun restsHere(): Boolean = ledColour && ledRest
+
+    /** 2.1.5 has everything 2.1.3 has. */
+    private fun stepsHere(): Boolean = restsHere() && steps
+
+    /** The keys holding a calibration row and their PWMs (M83), for the emulator's log. */
+    fun stepRows(): Map<Int, List<Int>> = rows.toMap()
+
+    /**
+     * `calstrike <note> <pwm>` (M83) as 2.1.5 answers it: refused while an update runs; `usage:` unless exactly a note
+     * 0..127 and a PWM 1..4096; "too soon" within 300 ms of the last strike, any key; "busy or has no board" on a key whose
+     * power board doesn't answer (the 24 V off) or off the piano's 84; else struck for 100 ms.
+     */
+    private fun calStrike(command: String): List<String> {
+        if (updating()) return listOf("  refused — updating firmware")
+        val parts = command.removePrefix("calstrike ").split(' ')
+        val note = parts.getOrNull(0)?.toIntOrNull()
+        val pwm = parts.getOrNull(1)?.toIntOrNull()
+        if (parts.size != 2 || note == null || pwm == null || note !in 0..127 || pwm !in 1..4096) {
+            return listOf("  usage: calstrike <note 0..127> <pwm 1..4096>")
+        }
+        val t = now()
+        val last = lastStrikeMs
+        if (last != null && t - last < CAL_STRIKE_GAP_MS) return listOf("  calstrike refused: too soon (one every $CAL_STRIKE_GAP_MS ms)")
+        if (!boardAnswers(note)) return listOf("  calstrike refused: that key is busy or has no board")
+        lastStrikeMs = t
+        return listOf("  calstrike $note at $pwm: struck for $CAL_STRIKE_MS ms")
+    }
+
+    /** Whether [note]'s power board answers: one of the piano's 84, its board OK in `!boards`. */
+    private fun boardAnswers(note: Int): Boolean {
+        if (note !in KEYS) return false
+        val boards = (valueOf("!$BOARDS") ?: "").split(',')
+        return boards.getOrNull((note - KEYS.first) / 12)?.trim() == "OK"
+    }
+
+    /** `steptable …` (M83) as 2.1.5 answers it: print, clear one, clear all, or set 2..8 rising PWMs 1..4095. */
+    private fun stepTable(command: String): List<String> {
+        val usage = listOf("  usage: steptable <note> [p1..pN rising 1..4095 | clear] | steptable clear")
+        if (command == "steptable clear") {
+            rows.clear()
+            return listOf("  steptable cleared: every key spreads its steps over min..max")
+        }
+        val tokens = command.removePrefix("steptable").split(' ').filter { it.isNotEmpty() }
+        val note = tokens.firstOrNull()?.toIntOrNull()?.takeIf { it in 0..127 } ?: return usage
+        val rest = tokens.drop(1)
+        if (rest.isEmpty()) {
+            val row = rows[note] ?: return listOf("  steptable $note: not calibrated")
+            return listOf("  steptable $note:" + row.joinToString("") { " $it" })
+        }
+        if (rest == listOf("clear")) {
+            rows.remove(note)
+            return listOf("  steptable $note cleared")
+        }
+        val pwms = ArrayList<Int>()
+        for (token in rest) {
+            val pwm = token.toIntOrNull()
+            if (pwms.size >= VEL_STEPS_MAX || pwm == null || pwm !in 1..4095 || (pwms.isNotEmpty() && pwm <= pwms.last())) return usage
+            pwms += pwm
+        }
+        if (pwms.size < 2) return usage
+        rows[note] = pwms
+        return listOf("  steptable $note = ${pwms.size} steps (saved by save or the auto-save)")
+    }
 
     /**
      * The link that set `ledrest` dropped (M81, firmware 2.1.3): it goes back to 0, as the piano lets the strip down to the
@@ -189,6 +273,20 @@ class EmulatedConsole(
                     listOf(if (range.off) "  usage: $name RRGGBB|off" else "  usage: $name RRGGBB (6 hex digits)")
                 }
             }
+            // M83, firmware 2.1.5: 0 (the smooth curve) or 2..8, in the firmware's own words.
+            Range.Steps -> {
+                val v = argument.toIntOrNull()
+                if (v == null || v !in 0..VEL_STEPS_MAX || v == 1) {
+                    listOf("  velsteps out of range (0 or 2..$VEL_STEPS_MAX)")
+                } else {
+                    values[name] = v.toString()
+                    if (v == 0) {
+                        listOf("  velsteps = 0: the smooth velocity curve")
+                    } else {
+                        listOf("  velsteps = $v: every note snaps to one of $v fixed loudness steps" + if (values["fullpower"] == "1") " (shows once fullpower is 0)" else "")
+                    }
+                }
+            }
             // M81, firmware 2.1.3: exactly 0 or 1, live only.
             Range.Rest -> if (argument == "0" || argument == "1") {
                 values[name] = argument
@@ -257,6 +355,9 @@ class EmulatedConsole(
         /** M81: exactly `0` or `1` (`ledrest`; not the switches' atoi). */
         data object Rest : Range
 
+        /** M83: `velsteps`, 0 or 2..8. */
+        data object Steps : Range
+
         data class Decimal(val low: Float, val high: Float) : Range
 
         data object Refused : Range
@@ -275,6 +376,16 @@ class EmulatedConsole(
         /** The strip at rest's key and fact (M81, firmware 2.1.3). */
         private const val LED_REST = "ledrest"
         private const val LED_REST_PROTO = "ledrestproto"
+
+        /** The distinct loudness steps' key and facts (M83, firmware 2.1.5), and its limits (config.h). */
+        private const val VEL_STEPS = "velsteps"
+        private const val STEPS_PROTO = "stepsproto"
+        private const val STEP_KEYS = "stepkeys"
+        private const val VEL_STEPS_MAX = 8
+        private const val CAL_STRIKE_MS = 100
+        private const val CAL_STRIKE_GAP_MS = 300L
+        private const val NANOS_PER_MS = 1_000_000L
+        private val KEYS = 24..107
         private val HEX = Regex("^[0-9a-f]{6}$")
 
         /** The read-only facts in `dump` order, as the emulator reports them. */
@@ -325,6 +436,7 @@ class EmulatedConsole(
             Tunable("fullpower", "1", Range.Switch),
             Tunable("volume", "100", Range.Whole(0, 100)),
             Tunable("velcurve", "1.60", Range.Decimal(0.4f, 3.0f)),
+            Tunable("velsteps", "5", Range.Steps),   // M83, firmware 2.1.5: stock 5
             Tunable("velmult", "1.00", Range.Decimal(0.1f, 5.0f)),
             Tunable("min", "1500", Range.Whole(0, 4095)),
             Tunable("minblack", "0", Range.Whole(0, 4095)),

@@ -94,11 +94,31 @@ class PianoSettingsTableTest {
         val new = PianoState.Ready(mapOf("gap" to "30"), emptyMap())
         assertTrue("2.1.3 and before: shown, so soft release can be turned off", rows.all { PianoSettings.listed(it, old) })
         assertTrue("2.1.4: hidden", rows.none { PianoSettings.listed(it, new) })
-        assertEquals(emptySet<String>(), PianoSettings.unlisted(old))
-        assertEquals(soft, PianoSettings.unlisted(new))
-        assertTrue("every other row shows as ever", PianoSettings.all.filterNot { it.name in soft }.all { s ->
+        val steps = setOf(LoudnessSteps.STEPS, PianoSettings.STEPS_ANCHOR)   // M83: neither piano says !stepsproto=1
+        assertEquals(steps, PianoSettings.unlisted(old))
+        assertEquals(soft + steps, PianoSettings.unlisted(new))
+        assertTrue("every other row shows as ever", PianoSettings.all.filterNot { it.name in soft || it.section == PianoSection.Steps }.all { s ->
             PianoSettings.listed(PianoRow.Control(s), new)
         })
+    }
+
+    @Test
+    fun `the loudness steps' section shows only on a piano that says stepsproto=1 (firmware 2_1_5, M83)`() {
+        val rows = PianoSettings.rows(PianoSection.Steps)
+        assertEquals(listOf(PianoRow.Steps, PianoRow.Control(PianoSettings.named("velsteps")!!)), rows)
+        assertEquals("Sound and touch, after LOUDNESS", PianoPage.Feel, PianoSection.Steps.page)
+        val before = PianoState.Ready(mapOf("fullpower" to "1"), mapOf("ledrestproto" to "1"))
+        val after = PianoState.Ready(mapOf("fullpower" to "1", "velsteps" to "5"), mapOf("stepsproto" to "1", "stepkeys" to "82"))
+        assertTrue("2.1.4: none of it", rows.none { PianoSettings.listed(it, before) })
+        assertTrue("2.1.5: all of it", rows.all { PianoSettings.listed(it, after) })
+        assertTrue(PianoSettings.unlisted(after).none { it == "velsteps" || it == PianoSettings.STEPS_ANCHOR })
+        val velsteps = PianoSettings.named("velsteps")!!
+        assertEquals("Smooth", velsteps.display("0"))
+        assertEquals("5", velsteps.display("5"))
+        val kind = velsteps.kind as SettingKind.Stepper
+        assertEquals("from Smooth straight to 2", 2, kind.next(0, up = true))
+        assertEquals(0, kind.next(2, up = false))
+        assertEquals(8, kind.next(8, up = true))
     }
 
     @Test

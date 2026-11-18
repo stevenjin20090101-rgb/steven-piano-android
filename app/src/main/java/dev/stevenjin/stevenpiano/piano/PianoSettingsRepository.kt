@@ -327,6 +327,35 @@ class PianoSettingsRepository(
         }
     }
 
+    // ---- The loudness steps' calibration (M83, firmware 2.1.5) -------------------------------------------------------
+
+    /** One calibration line at a time. */
+    private val stepping = Mutex()
+
+    /**
+     * One line of the loudness steps' calibration (M83; BLE_SETTINGS.md › "Distinct loudness steps"): [line], only one of
+     * its own ([LoudnessSteps.ours]: `calstrike`, `steptable`, `velsteps`, `fullpower 0`, `save`), sent now and its own reply
+     * awaited ([LoudnessSteps.answers]), trimmed: never a setting's error on the pages. Null when it wasn't sent (no
+     * console, before the dump, from a connection the piano doesn't let write), nothing came in [timeoutMs], or the
+     * connection ended meanwhile (at once). When the
+     * piano confirms `fullpower 0`, that is recorded as Full power chosen off (1.22's guard): after a calibration nothing
+     * turns it back on. One at a time; main thread.
+     */
+    suspend fun converse(line: String, timeoutMs: Long = STEPS_REPLY_MS): String? = stepping.withLock {
+        val here = session ?: return@withLock null
+        val reply = here.converse(line) ?: return@withLock null
+        try {
+            withTimeoutOrNull(timeoutMs) { reply.await() }
+        } finally {
+            here.conversed()
+        }
+    }
+
+    /** The piano's settings and facts read again (`dump`; M83, after the calibration wrote its steps). Nothing before the first. */
+    fun reread() {
+        session?.reread()
+    }
+
     /** One connection's conversation with the piano ([connection], the piano at [address]). Everything here dies with the connection. */
     private inner class Session(private val console: ConsoleChannel, private val connection: Long, address: String?) {
         private val job = SupervisorJob(scope.coroutineContext[Job])
@@ -473,6 +502,54 @@ class PianoSettingsRepository(
             restartReply = null
         }
 
+        /** M83: the calibration's line on its way, and its reply awaited. */
+        private var stepsLine: String? = null
+        private var stepsReply: CompletableDeferred<String?>? = null
+
+        /**
+         * A calibration line sent, its reply awaited; null (not sent) for a line that isn't the calibration's, before the
+         * dump, or from a connection the piano doesn't let write. What waited for the lock goes first, as [send] does; the
+         * line itself never names a setting's refusal on the pages ([lastCommand] stays).
+         */
+        fun converse(line: String): CompletableDeferred<String?>? {
+            if (!ready || !handshake.lock.phase.writable || !LoudnessSteps.ours(line)) {
+                log("Not sent: ${line.substringBefore(' ')}")
+                return null
+            }
+            val reply = CompletableDeferred<String?>()
+            stepsLine = line
+            stepsReply = reply
+            releaseQueued()
+            console.sendLine(line)
+            return reply
+        }
+
+        fun conversed() {
+            stepsLine = null
+            stepsReply = null
+        }
+
+        /** The calibration's reply, taken as its own; `fullpower 0` confirmed is recorded as Full power chosen off. */
+        private fun stepsReplied(line: String): Boolean {
+            val sent = stepsLine ?: return false
+            val waiting = stepsReply ?: return false
+            if (!LoudnessSteps.answers(sent, line)) return false
+            stepsLine = null
+            stepsReply = null
+            val text = line.trim()
+            if (sent == LoudnessSteps.FULL_POWER_OFF && LoudnessSteps.read(sent, text) == LoudnessSteps.Reply.Done) {
+                chooseFullPower(false)
+                log("Full power off by the loudness steps' calibration: recorded as chosen off")
+            }
+            waiting.complete(text)
+            return true
+        }
+
+        /** `dump` again, once the piano has answered the first. */
+        fun reread() {
+            if (ready) readAll()
+        }
+
         /** The reply to a `restart` awaited (`restarting`, or a refusal), taken as its own: never a setting's error. */
         private fun restartReplied(line: String): Boolean {
             val waiting = restartReply ?: return false
@@ -502,7 +579,10 @@ class PianoSettingsRepository(
             lines.filter(::isRead).forEach(console::sendLine)
         }
 
-        fun close() = job.cancel()
+        fun close() {
+            stepsReply?.complete(null)   // M83: the link went: the calibration hears so at once, not after its wait
+            job.cancel()
+        }
 
         /**
          * [temporary]: never counted for a save; [hold] (with it, as [holdTemporarily] asks): a save waits until it is
@@ -551,6 +631,7 @@ class PianoSettingsRepository(
         fun preset(command: String) {
             if (!ready || PianoSettings.presets.none { it.command == command }) return
             val keep = keepsFullPower()
+            val keepOff = keepsFullPowerOff()
             flushPending()   // a change waiting out its 150 ms came first, so it goes first
             send(command)
             if (keep) {
@@ -558,12 +639,20 @@ class PianoSettingsRepository(
                 send("$VOLUME ${FULL_VOLUME.toInt()}")
                 send("$FULL_POWER 1")
                 send(PianoAction.Save.command)
+            } else if (keepOff) {
+                // M83: Full power chosen off (a person, or the loudness steps' calibration) stays off: Snappy turns it on
+                // on the piano, and a preset never changes Full power. Saved so.
+                send("$FULL_POWER 0")
+                send(PianoAction.Save.command)
             }
             readAll()
         }
 
         /** Whether Full power is on and must stay on: on now, and no person has switched it off. */
         private fun keepsFullPower(): Boolean = values[FULL_POWER]?.trim() != "0" && !fullPowerChosenOff()
+
+        /** M83: whether Full power is off and stays off through a preset: off now, and chosen off (by a person or the calibration). */
+        private fun keepsFullPowerOff(): Boolean = values[FULL_POWER]?.trim() == "0" && fullPowerChosenOff()
 
         /** Set while the app turns Full power back on, so it asks once until the piano answers. */
         private var restoring = false
@@ -731,6 +820,7 @@ class PianoSettingsRepository(
         private fun onLine(line: String) {
             if (handshake.onLine(line)) return   // the lock's own replies are not the settings'
             if (restartReplied(line)) return   // v1.26 — M61: the safety check's restart
+            if (stepsReplied(line)) return   // M83: the loudness steps' calibration
             statusLines?.let { collecting ->
                 if (!VALUE_LINE.matches(line)) collecting += line
                 statusEnd?.cancel()
@@ -818,6 +908,9 @@ class PianoSettingsRepository(
         const val FULL_VOLUME = 100f
         const val DEBOUNCE_MS = 150L
         const val READ_TIMEOUT_MS = 2_000L
+
+        /** M83: a calibration line's reply, awaited this long at most. */
+        const val STEPS_REPLY_MS = 2_000L
         const val STATUS_SILENCE_MS = 300L
         const val STATUS_FIRST_LINE_MS = 2_000L
         const val END = "end"

@@ -27,6 +27,11 @@ import dev.stevenjin.stevenpiano.ui.LightsCopy
 import dev.stevenjin.stevenpiano.ui.LockCopy
 import dev.stevenjin.stevenpiano.ui.PlaybackCopy
 import dev.stevenjin.stevenpiano.ui.SystemCopy
+import dev.stevenjin.stevenpiano.ui.StepsCopy
+import dev.stevenjin.stevenpiano.ui.KioskGateSheet
+import dev.stevenjin.stevenpiano.ui.rememberKioskGate
+import dev.stevenjin.stevenpiano.audio.ListenAnswer
+import dev.stevenjin.stevenpiano.piano.LoudnessSteps
 import dev.stevenjin.stevenpiano.ui.components.FactRow
 import dev.stevenjin.stevenpiano.ui.components.GlassAlertDialog
 import androidx.compose.material3.TextButton
@@ -242,6 +247,7 @@ private fun PianoSettingsSection(
                         LevelRow(LightsCopy.COLOUR_CHANGE, LedColour.FADES, LedColour.FADE, SettingNotes.COLOUR_CHANGE, it, actions)
                     }
                     PianoRow.BetweenPieces -> ready?.let { BetweenPiecesRow(it, tablet.ledRest, actions) }   // M81
+                    PianoRow.Steps -> ready?.let { StepsRow(it) }   // M83: shown only with `!stepsproto=1` ([PianoSettings.listed])
                 }
                 if (error != null && place == placeKey(row)) ErrorBanner(error, actions::dismissPianoError)
             }
@@ -282,7 +288,7 @@ private fun placeKey(row: PianoRow): String? = when (row) {
     PianoRow.BackgroundGlow -> LedColour.AMBIENT
     PianoRow.ColourChange -> LedColour.FADE
     PianoRow.BetweenPieces -> LedRest.KEY
-    is PianoRow.Reading, PianoRow.KeyForceNote -> null
+    is PianoRow.Reading, PianoRow.KeyForceNote, PianoRow.Steps -> null
 }
 
 private const val PRESETS = "presets"
@@ -496,6 +502,53 @@ private fun ReadStatusRow(ready: PianoState.Ready?, statusText: String?, statusR
             enabled = enabled && !statusReading,
         )
     }
+}
+
+/**
+ * LOUDNESS STEPS (M83, piano firmware 2.1.5): the steps' status ("5 steps · 82 of 84 keys calibrated", or "Not calibrated
+ * yet"; while Full power is on, that it overrides them), then **Find the loudness steps**: the kiosk PIN while the kiosk keeps
+ * the settings locked, then a confirm saying what happens; Start begins it (the full-screen card takes over), and a refusal
+ * shows in the line under the button.
+ */
+@Composable
+private fun StepsRow(ready: PianoState.Ready) {
+    val graph = LocalContext.current.graph
+    val calibration by graph.steps.state.collectAsStateWithLifecycle()
+    val gate = rememberKioskGate()
+    var confirm by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
+    val status = StepsCopy.status(
+        velsteps = ready.values[LoudnessSteps.STEPS]?.trim()?.toIntOrNull(),
+        calibrated = LoudnessSteps.calibrated(ready.facts),
+        of = PianoSettings.testKeys.count(),
+    )
+    val fullPower = ready.values[FULL_POWER_SETTING]?.trim()?.let { it != "0" } == true
+    ReadingRow(StepsCopy.STATUS, status, note = if (fullPower) StepsCopy.FULL_POWER_ON else null)
+    ActionRow(note = said ?: StepsCopy.FIND_NOTE) {
+        ActionButton(
+            StepsCopy.FIND,
+            onClick = {
+                said = null
+                gate.run { confirm = true }
+            },
+            enabled = ready.lock.writable && !calibration.running,
+        )
+    }
+    if (confirm) {
+        GlassAlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(StepsCopy.CONFIRM_TITLE) },
+            text = { Text(StepsCopy.CONFIRM_TEXT) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    said = (graph.steps.start() as? ListenAnswer.Refused)?.message
+                }) { Text(StepsCopy.START) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(StepsCopy.NOT_NOW) } },
+        )
+    }
+    KioskGateSheet(gate)
 }
 
 /** Sound and touch's last row (v1.13; "Save now" under ACTIONS until then): the piano keeps what it holds after a restart. */

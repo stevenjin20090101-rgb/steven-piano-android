@@ -39,6 +39,9 @@ class EmulatedOta(
     private var out: SendChannel<OtaEvent>? = null
     private var ended = false
 
+    /** An update's session is open (M83: the emulated console refuses `calstrike` meanwhile, as the firmware does). */
+    val sessionOpen: Boolean get() = out != null && !ended
+
     override fun begin(header: OtaBegin): Flow<OtaEvent> = callbackFlow {
         val session = channel
         piano = OtaPiano(MTU, script)

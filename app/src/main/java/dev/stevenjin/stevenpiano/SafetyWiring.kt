@@ -99,6 +99,20 @@ internal class SafetyWiring(private val graph: AppGraph, private val app: Applic
     }
 
     /**
+     * The loudness steps' wait before their first strike (M83): the 24 V wanted with their own reason (the calibration's
+     * running state keeps or drops it from here: [PowerWiring.startRail]), then awaited up, 10 s at most; false when it
+     * doesn't come up. True at once without the power plug.
+     */
+    internal val stepsRail: suspend () -> Boolean = {
+        if (!graph.railPower.available.value) {
+            true
+        } else {
+            graph.railPower.wanted(RailKeeper.STEPS, true)
+            railUpWithin(RAIL_AWAIT_MS).also { up -> if (!up) graph.railPower.wanted(RailKeeper.STEPS, false) }
+        }
+    }
+
+    /**
      * The 24 V up and its notes no longer held, within [ms] (v1.26: the safety check's and Test every key's wait before a
      * sweep); true at once without the plug feature, false when it doesn't come up in time. Wants nothing by itself.
      */

@@ -28,6 +28,8 @@ import kotlin.random.Random
  * seen; `setprop debug.stevenpiano.silentkeys ''` hears every key again. `setprop debug.stevenpiano.detune 40` plays each
  * key up to 40 cents off its pitch (the same each time: v1.32 — M69, a piano out of tune), `''` in tune again. Frames as
  * [AndroidMicrophone]'s: 100 ms each, on a thread of their own, timed on `System.nanoTime`. Nothing is recorded.
+ * M83: it hears the loudness steps' `calstrike`s too ([EmulatedStrikes], from the emulated piano's console), each key's tone
+ * at the loudness its made-up curve gives for the strike's PWM, so the calibration can run to its end on the emulator.
  */
 class FakeMicrophone(
     private val struck: () -> StateFlow<KeyTestState>,
@@ -39,8 +41,8 @@ class FakeMicrophone(
         var on = true
     }
 
-    /** A key's sound: its fundamental, and when it began (`System.nanoTime`). */
-    private class Tone(val hz: Double, val fromNanos: Long)
+    /** A key's sound: its fundamental, when it began (`System.nanoTime`), and how loud (the key test's, by default). */
+    private class Tone(val hz: Double, val fromNanos: Long, val loudness: Double = LOUDNESS)
 
     @Volatile
     private var current: Hearing? = null
@@ -50,6 +52,7 @@ class FakeMicrophone(
         if (current != null) return true
         val hearing = Hearing(frames)
         current = hearing
+        EmulatedStrikes.clear()   // M83: only what struck while it hears
         val test = struck()
         Thread({
             val silent = silentKeys()   // on this thread: reading a property starts a process
@@ -92,6 +95,13 @@ class FakeMicrophone(
                         tones += Tone(hz, System.nanoTime() + LATENCY_NANOS)
                     }
                 }
+                // M83: the loudness steps' strikes, each at its key's made-up loudness for its PWM (none below its floor).
+                for (strike in EmulatedStrikes.take()) {
+                    if (strike.key in silent) continue
+                    val db = EmulatedStrikes.loudness(strike.key, strike.pwm) ?: continue
+                    val hz = KeyCheck.frequency(strike.key) * 2.0.pow(off(strike.key, cents) / 1200.0)
+                    tones += Tone(hz, strike.atNanos + LATENCY_NANOS, FULL_SCALE * 10.0.pow(db / 20.0) / TONE_RMS)
+                }
                 for (i in 0 until SLICE) {
                     val n = first + i
                     val at = start + n * NANOS_PER_SECOND / Microphone.RATE
@@ -119,7 +129,7 @@ class FakeMicrophone(
             if (hz >= TOP_HZ) break
             value += weight * sin(2.0 * PI * hz * t)
         }
-        return value * envelope * LOUDNESS
+        return value * envelope * tone.loudness
     }
 
     private fun sleepUntil(nanos: Long) {
@@ -170,6 +180,10 @@ class FakeMicrophone(
 
         /** About −16 dBFS for a key, and a room about 55 dB under it. */
         private const val LOUDNESS = 5_000.0
+
+        /** M83: a tone's RMS for an amplitude of 1 (its three harmonics), and full scale: a strike's dB as an amplitude. */
+        private const val TONE_RMS = 0.81
+        private const val FULL_SCALE = 32_768.0
         private const val ROOM = 120.0
         private const val ROOM_SEED = 7
     }

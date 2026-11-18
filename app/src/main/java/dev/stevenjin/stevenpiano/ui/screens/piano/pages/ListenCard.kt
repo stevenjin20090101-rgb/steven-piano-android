@@ -222,14 +222,14 @@ private fun shadeOf(key: Int, test: KeyTestState, heard: Map<Int, Boolean>?): Sh
  * safety check's card shows the keys a passed check didn't hear on it too (v1.33 — M71: a warning, never a lock).
  */
 @Composable
-internal fun KeyMap(test: KeyTestState) {
+internal fun KeyMap(test: KeyTestState, said: String? = null) {
     val content = MaterialTheme.colorScheme.onSurface
     val card = MaterialTheme.colorScheme.surfaceVariant
     val hairline = LocalHairline.current
     val amber = LocalAttention.current
     val tertiary = LocalTertiary.current
     val heard = remember(test.results) { test.results?.associate { it.key to it.heard } }
-    val spoken = line(test)
+    val spoken = said ?: line(test)   // M83: the loudness steps' card says its own
     Column(
         Modifier
             .fillMaxWidth()

@@ -308,7 +308,10 @@ internal class PowerWiring(private val graph: AppGraph, private val app: Applica
         }
     }
 
-    /** What the rail follows: the player (a piece playing; held while the rail comes up), Test every key, a firmware update, Live's keys. */
+    /**
+     * What the rail follows: the player (a piece playing; held while the rail comes up), Test every key, the loudness steps'
+     * calibration (M83), a firmware update, Live's keys.
+     */
     internal fun startRail() {
         // v1.36 — M72: a Shelly plug's pairing from before 1.36 cleared, once (it already reads as none).
         appScope.launch { if (plugStore.migrate()) LinkLog.warn("Power plug: the Shelly plug's pairing was cleared; this version pairs a SwitchBot plug") }
@@ -329,6 +332,7 @@ internal class PowerWiring(private val graph: AppGraph, private val app: Applica
             want = { rail.wanted(RailKeeper.PLAY, it) },
         ).start()
         appScope.launch { graph.remote.keyTest.state.map { it.running }.distinctUntilChanged().collect { rail.wanted(RailKeeper.KEY_TEST, it) } }
+        appScope.launch { graph.steps.state.map { it.running }.distinctUntilChanged().collect { rail.wanted(RailKeeper.STEPS, it) } }   // M83
         appScope.launch { graph.firmwareUpdater.state.map(::updateWantsRail).distinctUntilChanged().collect(rail::updateRunning) }
         // A keyboard's keys through Live are keys on the Keys tab: each starts the idle cut over, or wakes the rail.
         val main = Handler(android.os.Looper.getMainLooper())

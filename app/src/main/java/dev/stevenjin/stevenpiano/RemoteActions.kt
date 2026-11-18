@@ -278,6 +278,8 @@ class RemoteActions internal constructor(private val graph: AppGraph, private va
         override fun stopSequence() = graph.player.allKeysOff()
 
         override fun muteTablet(on: Boolean) = graph.tabletSound.mute(on)
+
+        override fun calibrating(): Boolean = graph.steps.running   // M83: the loudness steps have the microphone
     }
 
     /** Since when nothing has played (a piece, the key test, a keyboard through Live): what a key held on is weighed against. */
@@ -314,7 +316,8 @@ class RemoteActions internal constructor(private val graph: AppGraph, private va
                 graph.player.state.map { it.status == PlaybackStatus.Playing || it.loading },
                 keyTest.state.map { it.running },
                 graph.liveThru.state.map { it.open },
-            ) { piece, test, live -> piece || test || live }
+                graph.steps.state.map { it.running },   // M83: the loudness steps strike keys too
+            ) { piece, test, live, steps -> piece || test || live || steps }
                 .distinctUntilChanged()
                 .collect { quietSince.see(it, System.currentTimeMillis()) }
         }
