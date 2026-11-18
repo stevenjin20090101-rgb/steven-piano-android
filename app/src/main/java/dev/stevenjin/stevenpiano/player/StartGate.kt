@@ -37,6 +37,7 @@ interface StartGate {
 
 /**
  * A piece that sounded (v1.26 — M61; the safety check counts them): it played to its end ([ended]), or was stopped or
- * replaced by another after it had begun to play.
+ * replaced by another after it had begun to play. [soundedMs] (M82): how long it played, its pauses left out (the
+ * library counts a play when it ended or sounded 30 s: `data.sort.Plays`).
  */
-data class Played(val pieceId: Long, val ended: Boolean)
+data class Played(val pieceId: Long, val ended: Boolean, val soundedMs: Long = 0L)

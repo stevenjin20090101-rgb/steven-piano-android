@@ -215,6 +215,10 @@ class Player(
     private var loadedId: Long? = null
     private var sounding: Long? = null
 
+    // Owned by the scheduler thread (M82): how long the piece sounding has played, its pauses left out, and since when it plays.
+    private var soundedNanos = 0L
+    private var playingSince: Long? = null
+
     // Owned by the scheduler thread (v1.30 — M67): the router's keys and pedal as [held] was last told them.
     private var heldLow = 0L
     private var heldHigh = 0L
@@ -895,16 +899,23 @@ class Player(
 
     /**
      * Scheduler thread (v1.26 — M61): a piece sounds from when it begins to play until it ends, stops, leaves the engine
-     * or gives way to another; then it is told once on [played]. A pause is not an end.
+     * or gives way to another; then it is told once on [played], with how long it played (M82: the time between steps
+     * while playing, so a pause is left out). A pause is not an end.
      */
     private fun sounded() {
+        val now = clock.nanoTime()
+        playingSince?.let { soundedNanos += now - it }
+        playingSince = if (engine.status == PlaybackStatus.Playing) now else null
         val current = sounding
         val loaded = loadedId
         if (current != null && (engine.ended || engine.status == PlaybackStatus.Stopped || loaded != current)) {
             sounding = null
-            _played.tryEmit(Played(current, ended = engine.ended && loaded == current))
+            _played.tryEmit(Played(current, ended = engine.ended && loaded == current, soundedMs = soundedNanos / NANOS_PER_MS))
         }
-        if (sounding == null && engine.status == PlaybackStatus.Playing) sounding = loaded
+        if (sounding == null && engine.status == PlaybackStatus.Playing) {
+            sounding = loaded
+            soundedNanos = 0L
+        }
         _pieceSounding.value = sounding != null || engine.status == PlaybackStatus.Playing   // M81
     }
 
