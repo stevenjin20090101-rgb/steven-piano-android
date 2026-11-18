@@ -412,3 +412,10 @@ Steven (2026-11-08, multiple choice): "Day, fixed after faults", "About 25 s", "
 The piece lists gain a header row with **Sort** (A–Z · Popular · Hardest · Most keys at once · Recently played), a menu on
 glass as the playlists' sort is, and a **Disney** chip after Recent. Away from A–Z each row ends with one quiet measure ("18
 notes/s · 10 at once", "10 keys at once", "played 2 days ago"); on a phone it may wrap a long title to two lines.
+
+# v1.48 — M83: the loudness steps
+
+Sound and touch gains **Loudness steps** on a piano with firmware 2.1.5: a status line, **Find the loudness steps** and
+**Steps**. The calibration is a full-screen card as the safety check's: the key and its number, the time left, a keyboard filling
+in octave by octave, Stop; the microphone's banner says "finding the loudness steps". The result lists keys by their number of
+steps, the keys not calibrated in amber (attention), and OK.

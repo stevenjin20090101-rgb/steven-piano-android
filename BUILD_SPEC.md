@@ -315,3 +315,15 @@ its movement, up to 3 searches). `PieceOrder` holds the five orders, saved as `p
 across the library when listing. `Plays`: a play counts when `Played.ended` or `soundedMs` ≥ 30 s; `lastPlayedAt` as before.
 `DisneySongs` matches `assets/disney_songs.json`; `DisneyLabel` an album label containing "disney". Deezer gives 100000 to
 little-known tracks; those tie, and sort by plays.
+
+# v1.48 — M83: the loudness steps calibration (firmware 2.1.5)
+
+`velsteps` is in the table (Sound and touch, Smooth · 2..8). `piano/LoudnessSteps.kt` speaks `steptable` and `calstrike` word for
+word; `audio/StepsCalibration.kt` runs it (`StepsTake` measures each strike's peak, `StepPicker` fits each key monotonically and
+picks steps ≥ 4 dB apart, 2..8, from the floor, ≥ 10 dB over the room, to where it stops rising); `StepsWiring.kt` wires it, the
+card is `ui/components/StepsCard.kt`, the words `ui/StepsCopy.kt`. Rows are written only at the end (uncalibrated keys get
+`steptable N clear`), then `velsteps N` (the longest row), `fullpower 0`, `save`, each answered first; any stop writes nothing.
+The rail wants `RailKeeper.STEPS`, watched as a piece is (`pieceNow`), each `calstrike` counted in `HeldKeys.struckOutside`.
+Once `fullpower 0` is confirmed the repository records Full Power as chosen off, so presets (Snappy) are followed by `fullpower 0`
+and `save`. The emulated piano speaks 2.1.5 with a synthetic ear (`EmulatedStrikes`). Unknown until the real piano: the
+too-loud-room threshold (−40 dBFS), whether a solenoid's click clears the room, the undamped top keys' floors.
