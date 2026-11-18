@@ -75,7 +75,8 @@ data class StepsState(
  *   (the firmware allows one every 300 ms); on "too soon" it waits and sends it again. M83b: each strike is heard in its
  *   key's bands, 20 to 100 ms after the reply ([StepsTake]), so a click alone is not a strike; and on an undamped top key
  *   ([UNDAMPED_FROM] up, which rings on after release) the next strike waits for its band to die back near the room's
- *   there, [RING_CAP_MS] at most. About 10 to 12 minutes in all.
+ *   there, [RING_CAP_MS] at most. About 10 minutes for the damped keys, up to about 19 in all when every top key's ring
+ *   is waited out to the cap (the emulator's; the piano will tell).
  * - **Writing only at the end**: every key done, the uncalibrated keys' old rows cleared, one `steptable` per calibrated
  *   key, then `velsteps N` (the longest row), `fullpower 0` and `save`, each answered before the next; then the piano is
  *   read again. Stopped before, nothing is written.
@@ -467,7 +468,7 @@ class StepsCalibration(
         val first = firstStrikeAt
         val pace = if (first != null && strikes >= PACE_AFTER) (nanos() - first) / NANOS_PER_MS / (strikes - 1).coerceAtLeast(1) else STRIKE_EVERY_MS + PACE_SLACK_MS
         val left = (total - index - 1).toLong() * PER_KEY + (PER_KEY - struck).coerceAtLeast(0)
-        // M83b: the undamped keys still to come wait for their rings, about a second a strike.
+        // M83b: the undamped keys still to come wait for their rings, about 1.4 s a strike (the emulator's, near the cap).
         val undamped = keys.drop(index).count { it >= UNDAMPED_FROM }.toLong() * PER_KEY
         return left * pace + undamped * UNDAMPED_EXTRA_MS + WRITE_MS
     }
@@ -534,7 +535,7 @@ class StepsCalibration(
         const val UNDAMPED_FROM = 89
         const val NEAR_ROOM_DB = 3.0
         const val RING_CAP_MS = 2_000L
-        const val UNDAMPED_EXTRA_MS = 1_000L
+        const val UNDAMPED_EXTRA_MS = 1_400L
 
         /** About how long the writing takes, for the time left. */
         const val WRITE_MS = 5_000L

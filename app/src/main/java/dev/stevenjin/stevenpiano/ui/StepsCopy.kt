@@ -41,7 +41,7 @@ object StepsCopy {
     // ---- The confirm --------------------------------------------------------------------------------------------------
     const val CONFIRM_TITLE = "Find the loudness steps?"
     const val CONFIRM_TEXT =
-        "It needs a quiet room and takes about 10 minutes. The piano strikes every key many times, softly to hard, while " +
+        "It needs a quiet room and takes 10 to 20 minutes. The piano strikes every key many times, softly to hard, while " +
             "the tablet listens. Then each key gets its own steps, and Full power goes off."
     const val START = "Start"
     const val NOT_NOW = "Not now"
