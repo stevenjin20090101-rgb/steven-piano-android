@@ -117,6 +117,12 @@ class WorldRanksTest {
         )
         assertEquals(120_000, WorldRankMatch.pick("Suite bergamasque (1905) — Passepied", "Debussy", classical = true, suite)?.rank)
         assertEquals(673_034, WorldRankMatch.pick("Clair de lune", "Debussy", classical = true, suite)?.rank)
+        // A piece's number in a set counts too: the second Paganini study is not La Campanella.
+        val paganini = listOf(
+            track("Grandes études de Paganini, S. 141: No. 3 in G-Sharp Minor \"La campanella\"", 513_420, album = "Liszt: Paganini Studies"),
+            track("Grandes études de Paganini, S. 141: No. 2 in E-Flat Major", 61_000, album = "Liszt: Paganini Studies"),
+        )
+        assertEquals(61_000, WorldRankMatch.pick("Grandes Etudes de Paganini (1851) — No. 2", "Liszt", classical = true, paganini)?.rank)
     }
 
     @Test

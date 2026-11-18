@@ -39,7 +39,8 @@ class PacedDeezer(private val inner: DeezerApi, private val pacer: RequestPacer)
  * - **A classical piece**: a work is recorded many times under many titles, so its popularity is its most played
  *   recording that fits. The result's title must hold the piece's title as [CoverMatch.trackFits] reads them, over all
  *   their words ([workWords]: the piece within a set after " — " counts, "Suite bergamasque — Passepied" is not "Clair de
- *   lune"; "[2]" and a year in brackets do not); and when the title names a catalogue number ([catalogue]: "Op. 28 No.
+ *   lune"; "[2]" and a year in brackets do not), with every "No. 2" of it ("Grandes Études de Paganini — No. 2" is not No.
+ *   3); and when the title names a catalogue number ([catalogue]: "Op. 28 No.
  *   15", "BWV 846", "K. 331", "D. 960", "S. 141", "WoO 59"), the same work (or one of the set it names: "Op. 10" holds
  *   "Op. 10 No. 4"). Deezer's search wants every word it is given, so a long title ("… in C Major, WTC II, BWV 870")
  *   often finds nothing, and a short one finds the set's best-known piece: a classical piece whose first search fits
@@ -68,9 +69,12 @@ object WorldRankMatch {
         if (classical) {
             val work = catalogue(title)
             val words = workWords(title).joinToString(" ")
+            val numbers = numbers(words)
             return byArtist.filter { track ->
                 titles(track).any { name ->
-                    CoverMatch.trackFits(words, workWords(name).joinToString(" "), classical = true) &&
+                    val theirs = workWords(name).joinToString(" ")
+                    CoverMatch.trackFits(words, theirs, classical = true) &&
+                        numbers.all { " $it " in " $theirs " } &&
                         (work == null || catalogues(name).any { it == work || it.startsWith("$work ") })
                 }
             }.maxByOrNull { it.rank }
@@ -94,6 +98,9 @@ object WorldRankMatch {
         CoverMatch.words(BRACKETED.replace(YEAR.replace(text, " "), " ")).flatMap { word ->
             JOINED.matchEntire(word)?.let { listOf(it.groupValues[1], it.groupValues[2]) } ?: listOf(word)
         }.map { ALIASES[it] ?: it }
+
+    /** Every "no 2" of [words] (a piece's number in a set: "Grandes Études de Paganini — No. 2" is not No. 3). */
+    private fun numbers(words: String): List<String> = NUMBERED.findAll(words).map { it.value.trim() }.toList()
 
     private fun catalogues(text: String): List<String> {
         val words = workWords(text)
@@ -139,6 +146,9 @@ object WorldRankMatch {
 
     /** A prefix and its number written together: "d960", "bwv846", "op28". */
     private val JOINED = Regex("^(op|bwv|kv|k|d|s|woo|hwv|rv)(\\d+)$")
+
+    /** "no" and a number, as words. */
+    private val NUMBERED = Regex("(?<=^| )no \\d+(?= |$)")
 
     /** A square bracket's words: MAESTRO's "[2]". */
     private val BRACKETED = Regex("\\[[^\\]]*\\]")
