@@ -28,7 +28,8 @@ class EmulatedConsoleTest {
         assertEquals("end", dump.last())
         assertEquals("M80: the LED colour's fact after the others", "!ledcolorproto=1", dump[7])
         assertEquals("M81: the strip at rest's after it", "!ledrestproto=1", dump[8])
-        assertEquals("2.1.4: soft release's three gone", 9 + 45 + 1, dump.size)
+        assertEquals("M83: the loudness steps' facts after that", listOf("!stepsproto=1", "!stepkeys=0"), dump.subList(9, 11))
+        assertEquals("2.1.4: soft release's three gone; 2.1.5: velsteps", 11 + 46 + 1, dump.size)
         assertTrue(dump.none { it.startsWith("softrelease=") || it.startsWith("releasepwm=") || it.startsWith("releasems=") })
         assertEquals(listOf("  unknown setting"), console.handle("get softrelease"))
         assertEquals(listOf("  unknown — soft release was removed in 2.1.4 (every key-up is a plain cut)"), console.handle("softrelease 1"))
@@ -135,5 +136,55 @@ class EmulatedConsoleTest {
         assertEquals(listOf("!boards=OK,OK,OK,OK,MISSING,OK,OK"), console.handle("get !boards"))
         rail = null   // no fake plug: the piano's own fact
         assertEquals(listOf("!boards=OK,OK,OK,OK,OK,OK,OK"), console.handle("get boards"))
+    }
+
+    @Test
+    fun `firmware 2_1_5's loudness steps answer word for word, one calstrike every 300 ms (M83)`() {
+        var clock = 10_000L
+        val piano = EmulatedConsole(now = { clock })
+        assertEquals(listOf("velsteps=5"), piano.handle("get velsteps"))
+        val dump = piano.handle("dump")
+        assertEquals("velsteps after velcurve", "velsteps=5", dump[dump.indexOfFirst { it.startsWith("velcurve=") } + 1])
+        // velsteps: 0 or 2..8, in the firmware's words.
+        assertEquals(listOf("  velsteps out of range (0 or 2..8)"), piano.handle("velsteps 1"))
+        assertEquals(listOf("  velsteps out of range (0 or 2..8)"), piano.handle("velsteps 9"))
+        assertEquals(listOf("  velsteps = 4: every note snaps to one of 4 fixed loudness steps (shows once fullpower is 0)"), piano.handle("velsteps 4"))
+        assertEquals(listOf("  velsteps = 0: the smooth velocity curve"), piano.handle("velsteps 0"))
+        piano.handle("fullpower 0")
+        assertEquals(listOf("  velsteps = 6: every note snaps to one of 6 fixed loudness steps"), piano.handle("velsteps 6"))
+        // calstrike: struck, then too soon within 300 ms whatever the key, then struck again.
+        assertEquals(listOf("  calstrike 60 at 2400: struck for 100 ms"), piano.handle("calstrike 60 2400"))
+        clock += 299
+        assertEquals(listOf("  calstrike refused: too soon (one every 300 ms)"), piano.handle("calstrike 61 900"))
+        clock += 1
+        assertEquals(listOf("  calstrike 61 at 900: struck for 100 ms"), piano.handle("calstrike 61 900"))
+        assertEquals(listOf("  usage: calstrike <note 0..127> <pwm 1..4096>"), piano.handle("calstrike 61 0"))
+        assertEquals(listOf("  usage: calstrike <note 0..127> <pwm 1..4096>"), piano.handle("calstrike 61 900 1"))
+        clock += 300
+        assertEquals("off the piano's 84: no board", listOf("  calstrike refused: that key is busy or has no board"), piano.handle("calstrike 12 900"))
+        piano.railBoards = { "MISSING,MISSING,MISSING,MISSING,MISSING,MISSING,MISSING" }
+        assertEquals("the 24 V off", listOf("  calstrike refused: that key is busy or has no board"), piano.handle("calstrike 60 900"))
+        piano.railBoards = { null }
+        piano.updating = { true }
+        assertEquals(listOf("  refused — updating firmware"), piano.handle("calstrike 60 900"))
+        piano.updating = { false }
+        // steptable: a row, read back, cleared; the usage for anything else.
+        assertEquals(listOf("  steptable 60: not calibrated"), piano.handle("steptable 60"))
+        assertEquals(listOf("  steptable 60 = 3 steps (saved by save or the auto-save)"), piano.handle("steptable 60 1200 1700 2600"))
+        assertEquals(listOf("  steptable 60: 1200 1700 2600"), piano.handle("steptable 60"))
+        assertEquals(listOf("!stepkeys=1"), piano.handle("get stepkeys"))
+        val usage = listOf("  usage: steptable <note> [p1..pN rising 1..4095 | clear] | steptable clear")
+        assertEquals("not rising", usage, piano.handle("steptable 61 1200 1200"))
+        assertEquals("one step", usage, piano.handle("steptable 61 1200"))
+        assertEquals("over 4095", usage, piano.handle("steptable 61 1200 4096"))
+        assertEquals("nine steps", usage, piano.handle("steptable 61 1 2 3 4 5 6 7 8 9"))
+        assertEquals(listOf("  steptable 60 cleared"), piano.handle("steptable 60 clear"))
+        piano.handle("steptable 62 100 200")
+        assertEquals(listOf("  steptable cleared: every key spreads its steps over min..max"), piano.handle("steptable clear"))
+        assertEquals(listOf("!stepkeys=0"), piano.handle("get !stepkeys"))
+        // 2.1.4: none of it.
+        val older = EmulatedConsole(steps = false)
+        assertTrue(older.handle("dump").none { it.startsWith("velsteps=") || it.startsWith("!stepsproto") || it.startsWith("!stepkeys") })
+        assertEquals(listOf("  unknown command — type 'help'"), older.handle("calstrike 60 2400"))
     }
 }

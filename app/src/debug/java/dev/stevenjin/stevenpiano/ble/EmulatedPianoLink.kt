@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import dev.stevenjin.stevenpiano.SystemProperty
+import dev.stevenjin.stevenpiano.audio.EmulatedStrikes
 import dev.stevenjin.stevenpiano.diag.LinkLog
 import dev.stevenjin.stevenpiano.firmware.FakeOta
 import dev.stevenjin.stevenpiano.midi.MidiBatch
@@ -59,6 +60,12 @@ import kotlinx.coroutines.flow.asStateFlow
  * with what the strip would show ("LED strip: ledrest 1 … at rest: solid"), and when the link drops a 1 goes back to 0 and
  * says so ("LED strip: the link that set ledrest dropped: ledrest 0, …"). `adb shell setprop debug.stevenpiano.ledrest
  * none` makes the next connection a 2.1.2 piano, without it.
+ * The distinct loudness steps (M83, firmware 2.1.5): it takes `velsteps`, `steptable` and `calstrike` with the firmware's
+ * replies and refusals word for word and its 300 ms between strikes, and says `!stepsproto=1` and `!stepkeys`; each of those
+ * lines is logged again with its reply ("Loudness steps: calstrike 60 2400 → calstrike 60 at 2400: struck for 100 ms",
+ * `adb logcat -s PianoLink`), and every struck key goes to the emulator's microphone ([EmulatedStrikes]), which answers it
+ * with a loudness from a made-up curve of that key's. `adb shell setprop debug.stevenpiano.steps none` makes the next
+ * connection a 2.1.4 piano, without them.
  */
 class EmulatedPianoLink(
     private val consoleMode: () -> ConsoleMode = ::consoleModeFromProperty,
@@ -71,7 +78,10 @@ class EmulatedPianoLink(
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     override val state: StateFlow<LinkState> = _state.asStateFlow()
     private val main = Handler(Looper.getMainLooper())
-    private val emulated = EmulatedConsole().apply { railBoards = { EmulatedPlug.boards() } }   // v1.26 — M60: the 24 V on the fake plug
+    private val emulated = EmulatedConsole().apply {
+        railBoards = { EmulatedPlug.boards() }   // v1.26 — M60: the 24 V on the fake plug
+        updating = { (ota as? EmulatedOta)?.sessionOpen == true }   // M83: no calstrike during an update
+    }
     private val replies = MutableSharedFlow<String>(extraBufferCapacity = REPLY_BUFFER_LINES)
 
     @Volatile
@@ -90,7 +100,13 @@ class EmulatedPianoLink(
             if (mode == ConsoleMode.Mute) return
             val answer = synchronized(emulated) { emulated.handle(text) }
             val key = text.substringBefore(' ')
-            if (key == LED_REST_KEY) {
+            if (key in STEPS_KEYS) {
+                // M83: the loudness steps, logged with the reply; a strike sounds in the emulator's microphone.
+                val reply = answer.firstOrNull()?.trim().orEmpty()
+                Log.i(TAG, "Loudness steps: $text → $reply")
+                STRUCK.matchEntire(reply)?.let { EmulatedStrikes.struck(it.groupValues[1].toInt(), it.groupValues[2].toInt()) }
+                if (text == "save" || text.startsWith("velsteps")) Log.i(TAG, "Loudness steps: rows on ${synchronized(emulated) { emulated.stepRows().size }} keys")
+            } else if (key == LED_REST_KEY) {
                 Log.i(TAG, "LED strip: $text (${answer.firstOrNull()?.trim()}), " + synchronized(emulated) { emulated.stripColour() })
             } else if (key in LED_COLOUR_KEYS) {
                 Log.i(TAG, "LED strip: " + synchronized(emulated) { emulated.stripColour() })
@@ -144,6 +160,7 @@ class EmulatedPianoLink(
         synchronized(emulated) {
             emulated.ledColour = SystemProperty.read(LED_COLOUR_PROPERTY).trim() != NO_LED_COLOUR
             emulated.ledRest = SystemProperty.read(LED_REST_PROPERTY).trim() != NO_LED_REST   // M81
+            emulated.steps = SystemProperty.read(STEPS_PROPERTY).trim() != NO_STEPS   // M83
         }
         console = if (mode == ConsoleMode.None) null else channel
         val fake = fakeOta()
@@ -290,6 +307,12 @@ class EmulatedPianoLink(
         private const val LED_REST_PROPERTY = "debug.stevenpiano.ledrest"
         private const val NO_LED_REST = "none"
         private const val LED_REST_KEY = "ledrest"
+
+        /** `debug.stevenpiano.steps none`: a piano without the loudness steps (M83, 2.1.4); unset, the 2.1.5 piano. */
+        private const val STEPS_PROPERTY = "debug.stevenpiano.steps"
+        private const val NO_STEPS = "none"
+        private val STEPS_KEYS = setOf("velsteps", "steptable", "calstrike", "fullpower", "save")
+        private val STRUCK = Regex("""^calstrike (\d+) at (\d+): struck for \d+ ms$""")
         private const val UNSET = "(unset)"
 
         /** The emulated piano's Bluetooth address, from the range RFC 7042 keeps for documentation. */
