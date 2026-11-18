@@ -1370,6 +1370,40 @@ class RailKeeperTest {
     }
 
     @Test
+    fun `the loudness steps' calibration is watched as a piece - a board on trips within 6 s, !i2cfails read every 5 s (M83)`() = runTest {
+        // Its strikes, a third of the time, explained by the keys they count as held; a board latched on is not.
+        val bench = Bench(this)
+        val watch = bench.Watch().apply { heldKeys = 0.4 }
+        val keeper = bench.keeper(watch)
+        keeper.wanted(RailKeeper.STEPS, true)
+        advanceTimeBy(RAIL_UP_SETTLE_MS)
+        runCurrent()
+        assertEquals(RailPhase.Up, keeper.phase.value)
+        bench.log.clear()
+        bench.extraWatts = 0.4 * PowerWatch.COIL_WATTS
+        advanceTimeBy(20_000)
+        assertNull("the strikes explain their draw", keeper.message.value)
+        val stuck = currentTime
+        bench.extraWatts = 0.4 * PowerWatch.COIL_WATTS + 144.0
+        advanceTimeBy(8_000)
+        assertEquals(RailMessage.BoardOn(144, null, playing = true), keeper.message.value)
+        assertTrue("CUT within 6 s", bench.log.single { it.kind == "CUT" }.at - stuck <= 6_000L + RPC_MS)
+        assertEquals(1, watch.due)
+
+        val again = Bench(this)
+        val facts = again.Watch()
+        val calibrating = again.keeper(facts)
+        calibrating.wanted(RailKeeper.STEPS, true)
+        advanceTimeBy(RAIL_UP_SETTLE_MS + 7_000)
+        assertEquals(RailPhase.Up, calibrating.phase.value)
+        val lost = currentTime
+        facts.fails = "1"
+        advanceTimeBy(6_000)
+        assertEquals(RailMessage.BoardLost(0, 1), calibrating.message.value)
+        assertTrue("read every 5 s, as mid-piece", again.log.single { it.kind == "CUT" }.at - lost <= 5_500)
+    }
+
+    @Test
     fun `!i2cfails up - mid-piece within 5 s, and idle within 30 s - CUT at once and the check due (v1_39 M76)`() = runTest {
         val bench = Bench(this)
         val watch = bench.Watch()

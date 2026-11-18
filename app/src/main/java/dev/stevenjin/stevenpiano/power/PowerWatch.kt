@@ -344,6 +344,24 @@ class HeldKeys(private val now: () -> Long) {
     @Synchronized
     fun struckSince(at: Long): Boolean = lastStrike != NONE && lastStrike >= at
 
+    /**
+     * A strike outside the router (M83, the loudness steps' `calstrike`, which goes over the piano's console): one key held
+     * from [from] to [to] (the keeper's clock, ms; [dev.stevenjin.stevenpiano.piano.LoudnessSteps.heldSpan]: its 100 ms and
+     * the release lag), counted as a stroke that ended, and as a strike at [from]; no more. Anything held past [to] is the
+     * fault the watches look for.
+     */
+    @Synchronized
+    fun struckOutside(from: Long, to: Long) {
+        if (to <= from) return
+        if (strokes == STROKES) drop(pedal = false)
+        val j = (strokeFirst + strokes++) % STROKES
+        strokeFrom[j] = from
+        strokeTo[j] = to
+        if (lastStrike == NONE || from > lastStrike) lastStrike = from
+        val t = now()
+        while (strokes > 0 && strokeTo[strokeFirst] + MIN_ON_MS < t - KEPT_MS) drop(pedal = false)
+    }
+
     private fun flip(changed: Long, bits: Long, first: Int, t: Long) {
         var left = changed
         while (left != 0L) {
