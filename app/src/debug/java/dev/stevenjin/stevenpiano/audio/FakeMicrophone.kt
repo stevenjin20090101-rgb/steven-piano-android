@@ -30,6 +30,8 @@ import kotlin.random.Random
  * [AndroidMicrophone]'s: 100 ms each, on a thread of their own, timed on `System.nanoTime`. Nothing is recorded.
  * M83: it hears the loudness steps' `calstrike`s too ([EmulatedStrikes], from the emulated piano's console), each key's tone
  * at the loudness its made-up curve gives for the strike's PWM, so the calibration can run to its end on the emulator.
+ * M83b: every `calstrike` clicks too (the solenoid: a few ms of broadband noise, whether or not the string sounds, so a
+ * strike below a key's floor is a click alone), and the top keys (F6 up) ring on undamped after release.
  */
 class FakeMicrophone(
     private val struck: () -> StateFlow<KeyTestState>,
@@ -42,7 +44,9 @@ class FakeMicrophone(
     }
 
     /** A key's sound: its fundamental, when it began (`System.nanoTime`), and how loud (the key test's, by default). */
-    private class Tone(val hz: Double, val fromNanos: Long, val loudness: Double = LOUDNESS)
+    private class Tone(val hz: Double, val fromNanos: Long, val loudness: Double = LOUDNESS, val undamped: Boolean = false) {
+        val lifeNanos: Long get() = if (undamped) UNDAMPED_NANOS else TONE_NANOS
+    }
 
     @Volatile
     private var current: Hearing? = null
@@ -77,6 +81,7 @@ class FakeMicrophone(
         val start = System.nanoTime()
         val room = Random(ROOM_SEED)
         val tones = ArrayList<Tone>()
+        val clicks = ArrayList<Long>()   // M83b: each strike's click, when it began
         var seen: Pair<Int, Int>? = null
         var index = 0L
         while (hearing.on) {
@@ -97,19 +102,22 @@ class FakeMicrophone(
                 }
                 // M83: the loudness steps' strikes, each at its key's made-up loudness for its PWM (none below its floor).
                 for (strike in EmulatedStrikes.take()) {
+                    clicks += strike.atNanos + CLICK_DELAY_NANOS   // M83b: the solenoid clicks, sounding or not
                     if (strike.key in silent) continue
                     val db = EmulatedStrikes.loudness(strike.key, strike.pwm) ?: continue
                     val hz = KeyCheck.frequency(strike.key) * 2.0.pow(off(strike.key, cents) / 1200.0)
-                    tones += Tone(hz, strike.atNanos + LATENCY_NANOS, FULL_SCALE * 10.0.pow(db / 20.0) / TONE_RMS)
+                    tones += Tone(hz, strike.atNanos + LATENCY_NANOS, FULL_SCALE * 10.0.pow(db / 20.0) / TONE_RMS, undamped = strike.key >= StepsCalibration.UNDAMPED_FROM)
                 }
                 for (i in 0 until SLICE) {
                     val n = first + i
                     val at = start + n * NANOS_PER_SECOND / Microphone.RATE
                     var value = (room.nextDouble() - 0.5) * ROOM
                     for (tone in tones) value += sound(tone, at)
+                    for (click in clicks) if (at >= click && at < click + CLICK_NANOS) value += (room.nextDouble() * 2 - 1) * CLICK
                     samples[slice * SLICE + i] = value.roundToInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                 }
-                tones.removeAll { System.nanoTime() - it.fromNanos > TONE_NANOS }
+                tones.removeAll { System.nanoTime() - it.fromNanos > it.lifeNanos }
+                clicks.removeAll { System.nanoTime() - it > CLICK_NANOS + 100_000_000L }
             }
             if (!hearing.on) return
             hearing.frames(MicFrame(samples, index, start + index * NANOS_PER_SECOND / Microphone.RATE))
@@ -120,9 +128,9 @@ class FakeMicrophone(
     /** [tone] at [at] (`System.nanoTime`): its harmonics under the key's envelope. */
     private fun sound(tone: Tone, at: Long): Double {
         val t = (at - tone.fromNanos) / NANOS_PER_SECOND.toDouble()
-        if (t < 0.0 || t > TONE_SECONDS) return 0.0
-        var envelope = minOf(1.0, t / ATTACK_SECONDS) * exp(-t / DECAY_SECONDS)
-        if (t > HELD_SECONDS) envelope *= exp(-(t - HELD_SECONDS) / DAMPER_SECONDS)
+        if (t < 0.0 || t * NANOS_PER_SECOND > tone.lifeNanos) return 0.0
+        var envelope = minOf(1.0, t / ATTACK_SECONDS) * exp(-t / if (tone.undamped) UNDAMPED_DECAY_SECONDS else DECAY_SECONDS)
+        if (t > HELD_SECONDS && !tone.undamped) envelope *= exp(-(t - HELD_SECONDS) / DAMPER_SECONDS)
         var value = 0.0
         for ((h, weight) in HARMONICS.withIndex()) {
             val hz = tone.hz * (h + 1)
@@ -165,8 +173,14 @@ class FakeMicrophone(
 
         /** From the strike to the string sounding. */
         private const val LATENCY_NANOS = 8_000_000L
-        private const val TONE_SECONDS = 0.6
-        private const val TONE_NANOS = 700_000_000L
+        private const val TONE_NANOS = 600_000_000L
+
+        /** M83b: an undamped top key rings on, down by e every 0.5 s, for 3.5 s; each strike's click, 3 ms at about −20 dBFS. */
+        private const val UNDAMPED_DECAY_SECONDS = 0.5
+        private const val UNDAMPED_NANOS = 3_500_000_000L
+        private const val CLICK_DELAY_NANOS = 2_000_000L
+        private const val CLICK_NANOS = 3_000_000L
+        private const val CLICK = 6_000.0
         private const val ATTACK_SECONDS = 0.005
         private const val DECAY_SECONDS = 0.3
 
