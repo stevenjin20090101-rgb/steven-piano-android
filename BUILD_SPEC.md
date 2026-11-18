@@ -300,3 +300,7 @@ plays and CUTs (`RailMessage.PlugSilent`; no coil fault, so no cool-down). No pl
 now needs two readings the plug sent at least `WELD_SETTLE_MS` (6 s) after the CUT and `WELD_APART_MS` apart, both above
 `weldedAbove()` (its meter trails the switch, so the old 3 s look could read the draw from before the CUT); an off advert
 reading at or under it well after the CUT clears it.
+
+## The release: 1.47 (versionCode 58)
+
+Nothing plays unless the power plug can cut the 24 V: if its relay may be stuck on, or it stops answering, Play and the other ways of switching the 24 V on are refused, with the reason on the screen, and a piece stops if the plug goes quiet while it plays. The stuck-relay check now waits for fresh readings, so a slow plug reading no longer raises a false alarm. Soft release's settings are hidden on piano firmware 2.1.4 and later, which removed it.

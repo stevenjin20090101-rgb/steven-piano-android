@@ -515,5 +515,12 @@
     "minSdk": 26,
     "tag": "v1.46",
     "publishedAt": "2026-11-08"
+  },
+  {
+    "versionCode": 58,
+    "versionName": "1.47",
+    "notes": "Nothing plays unless the power plug can cut the 24 V: if its relay may be stuck on, or it stops answering, Play and the other ways of switching the 24 V on are refused, with the reason on the screen, and a piece stops if the plug goes quiet while it plays. The stuck-relay check now waits for fresh readings, so a slow plug reading no longer raises a false alarm. Soft release's settings are hidden on piano firmware 2.1.4 and later, which removed it.",
+    "tag": "v1.47",
+    "draft": true
   }
 ]
