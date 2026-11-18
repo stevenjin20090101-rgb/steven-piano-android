@@ -206,6 +206,9 @@ private fun PianoSettingsSection(
     statusReading: Boolean,
     actions: PianoSettingsActions,
 ) {
+    // 2.1.4: soft release's rows only while the piano lists them; a section left with none (Release) shows no eyebrow either.
+    val rows = PianoSettings.rows(section).filter { PianoSettings.listed(it, ready) }
+    if (rows.isEmpty()) return
     val title = section.title
     if (title != null) SectionEyebrow(title) else SectionRule()
     val error = ready?.lastError
@@ -216,7 +219,7 @@ private fun PianoSettingsSection(
     val tablet = LocalContext.current.graph.settings.collectAsStateWithLifecycle().value
     val chosen = tablet.ledColourSource
     val reduced = rememberReducedMotion()
-    for (row in PianoSettings.rows(section)) {
+    for (row in rows) {
         val shown = LedColour.shows(row, ready, chosen)
         ColourReveal(shown, LedColour.dependsOnColour(row), reduced) {
             Anchored(SettingsIndex.anchorOf(row)) {

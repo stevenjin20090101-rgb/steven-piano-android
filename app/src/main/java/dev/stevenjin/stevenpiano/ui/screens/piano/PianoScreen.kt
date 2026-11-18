@@ -338,7 +338,8 @@ private fun PianoHub(
         )
     }
     val query = vm.query
-    val results = remember(query, midi) { SettingsIndex.search(query, midi) }
+    val unlisted = remember(piano) { dev.stevenjin.stevenpiano.piano.PianoSettings.unlisted(piano) }   // 2.1.4: soft release gone
+    val results = remember(query, midi, unlisted) { SettingsIndex.search(query, midi, unlisted) }
 
     // The hub scrolls beneath its header's glass (DESIGN.md › v1.9); beside a page, each has its own.
     GlassHeaderPane(scroll = scroll, modifier = modifier, header = { ScreenHeader("Piano", Modifier.readingWidth()) }) {

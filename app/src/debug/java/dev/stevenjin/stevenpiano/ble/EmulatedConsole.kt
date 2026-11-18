@@ -82,6 +82,7 @@ class EmulatedConsole(
             name == "ledtest" -> ledTest(argument)
             name == "testmin" || name == "testmax" -> strikeTest(name == "testmax", argument)
             name == "note" -> emptyList()
+            name in SOFT_RELEASE && argument.isNotEmpty() -> listOf("  unknown — soft release was removed in 2.1.4 (every key-up is a plain cut)")
             argument.isNotEmpty() && (name in values || name == "minwhite") && has(name) ->
                 set(if (name == "minwhite") "min" else name, argument)
             else -> listOf("  unknown command — type 'help'")
@@ -202,16 +203,16 @@ class EmulatedConsole(
 
     private fun preset(name: String): List<String> {
         val changes = when (name) {
-            "soft" -> mapOf("fullpower" to "0", "volume" to "55", "softrelease" to "1")
+            // Firmware 2.1.4 removed soft release: no preset touches it.
+            "soft" -> mapOf("fullpower" to "0", "volume" to "55")
             "cinematic" -> mapOf(
-                "fullpower" to "0", "softrelease" to "1", "releasepwm" to "1100", "releasems" to "28",
-                "minstrike" to "45", "gap" to "22", "restrike" to "0", "leds" to "1", "ledmode" to "3",
+                "fullpower" to "0", "minstrike" to "45", "gap" to "22", "restrike" to "0", "leds" to "1", "ledmode" to "3",
             )
             "expressive" -> mapOf(
                 "fullpower" to "0", "min" to "2400", "max" to "4095", "velcurve" to "1.70", "humanvel" to "6",
-                "humantime" to "12", "softrelease" to "1", "volume" to "100",
+                "humantime" to "12", "volume" to "100",
             )
-            else -> mapOf("leds" to "0", "fullpower" to "1", "gap" to "0", "minstrike" to "20", "softrelease" to "0", "restrike" to "0")
+            else -> mapOf("leds" to "0", "fullpower" to "1", "gap" to "0", "minstrike" to "20", "restrike" to "0")
         }
         values.putAll(changes)
         return listOf(SAVED, "  ${name.uppercase(Locale.ROOT)} preset applied + saved")
@@ -238,7 +239,6 @@ class EmulatedConsole(
             "  PWM settings: min=${v("min")}  max=${v("max")}  hold=${v("hold")} ms  velmult=${v("velmult")}",
             "  volume=${v("volume")}%  fullpower=${onOff("fullpower")}  velcurve=${v("velcurve")}",
             "  freq=${v("freq")} Hz   gap=${v("gap")} ms   minstrike=${v("minstrike")} ms",
-            "  softrelease=${onOff("softrelease")}  releasepwm=${v("releasepwm")}  releasems=${v("releasems")} ms",
             "  leds=${onOff("leds")}   led: bright=${v("ledbright")}/255 count=${v("ledcount")} offset=${v("ledoffset")}",
             "  pedal servo: ${if (v("pedalon") == "1") "ENABLED" else "disabled"}  board=${facts["pedalboard"]}",
             "  i2cFails=${facts["i2cfails"]} (rises during PWM-EMI storms; steady 0 is healthy)",
@@ -290,6 +290,9 @@ class EmulatedConsole(
 
         private val PRESETS = setOf("soft", "cinematic", "expressive", "snappy")
 
+        /** Soft release's keys: firmware 2.1.4 removed them, and answers a write with its own refusal. */
+        private val SOFT_RELEASE = setOf("softrelease", "releasepwm", "releasems")
+
         private val REFUSED = setOf(
             "fire", "rawnote", "sweep", "pwm", "ramp", "reset", "blereset", "pedaltest",
             "keyforce", "keyforce_all", "keyforce_white", "keyforce_black", "waterfall",
@@ -336,9 +339,6 @@ class EmulatedConsole(
             Tunable("gap", "30", Range.Whole(0, 300)),
             Tunable("hold", "2000", Range.Whole(50, 4000, clamps = true)),
             Tunable("restrike", "0", Range.Whole(40, 1000, zeroIsOff = true)),
-            Tunable("softrelease", "1", Range.Switch),
-            Tunable("releasepwm", "1100", Range.Whole(0, 4095)),
-            Tunable("releasems", "22", Range.Whole(0, 200)),
             Tunable("freq", "1500", Range.Whole(24, 1526)),
             Tunable("keyforce_white", "1.00", Range.Refused),
             Tunable("keyforce_black", "1.00", Range.Refused),

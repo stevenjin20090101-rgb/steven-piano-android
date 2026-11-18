@@ -113,11 +113,17 @@ object SettingsIndex {
         }
     }
 
-    /** What [query] finds, best first; none for a blank query. [midiPiano]: Steven Piano's own pages are hidden, and so are their rows. */
-    fun search(query: String, midiPiano: Boolean = false): List<SettingsEntry> {
+    /**
+     * What [query] finds, best first; none for a blank query. [midiPiano]: Steven Piano's own pages are hidden, and so are
+     * their rows. [unlisted]: settings the piano doesn't list, left out ([PianoSettings.unlisted]: soft release on 2.1.4).
+     */
+    fun search(query: String, midiPiano: Boolean = false, unlisted: Set<String> = emptySet()): List<SettingsEntry> {
         val typed = words(query)
         if (typed.isEmpty()) return emptyList()
-        val shown = if (midiPiano) entries.filterNot { (it.target as? SettingsTarget.Row)?.page?.piano != null } else entries
+        val shown = entries.filterNot { entry ->
+            val row = entry.target as? SettingsTarget.Row
+            (midiPiano && row?.page?.piano != null) || row?.anchor in unlisted
+        }
         val onLabel = shown.filter { entry -> typed.all { word -> entry.labelWords.any { it.startsWith(word) } } }
         val onSynonym = shown.filter { entry -> entry !in onLabel && typed.all { word -> (entry.labelWords + entry.otherWords).any { it.startsWith(word) } } }
         return (onLabel + onSynonym).take(MAX_RESULTS)

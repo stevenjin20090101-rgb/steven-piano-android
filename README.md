@@ -261,8 +261,8 @@ on the tablet*). Made by Steven Jin. Version 1.46.
   firmware just says it doesn't offer them yet). **Sound and touch**: the Soft,
   Cinematic, Expressive and Snappy presets, *Full power* and *Piano volume*; under
   **Fine tuning** (folded until you open it) the velocity curve, the strike floors
-  and ceiling (with a strike test), the key-force readings, timing, release and
-  drive; then *Save to the piano now*. **Lights and screen**: the strip on or off,
+  and ceiling (with a strike test), the key-force readings, timing, release (soft release, only on piano firmware before
+  2.1.4, which removed it: from 1.47 its rows hide when the piano doesn't list them) and drive; then *Save to the piano now*. **Lights and screen**: the strip on or off,
   mode, brightness and palette. From 1.45, with piano firmware 2.1.2 or later: **Colour**,
   where the strip's colour comes from (*Album art*: the playing piece's cover, fading to the
   next; *Custom*: one picked from swatches or with hue and saturation, kept on the piano;

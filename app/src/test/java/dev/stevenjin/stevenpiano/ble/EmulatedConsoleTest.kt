@@ -28,7 +28,10 @@ class EmulatedConsoleTest {
         assertEquals("end", dump.last())
         assertEquals("M80: the LED colour's fact after the others", "!ledcolorproto=1", dump[7])
         assertEquals("M81: the strip at rest's after it", "!ledrestproto=1", dump[8])
-        assertEquals(9 + 48 + 1, dump.size)
+        assertEquals("2.1.4: soft release's three gone", 9 + 45 + 1, dump.size)
+        assertTrue(dump.none { it.startsWith("softrelease=") || it.startsWith("releasepwm=") || it.startsWith("releasems=") })
+        assertEquals(listOf("  unknown setting"), console.handle("get softrelease"))
+        assertEquals(listOf("  unknown — soft release was removed in 2.1.4 (every key-up is a plain cut)"), console.handle("softrelease 1"))
         assertTrue(dump.all { it == "end" || '=' in it })
         // M80, firmware 2.1.2: the strip's colour after rainspeed, read back lower case, refused in the firmware's words.
         val rainspeed = dump.indexOfFirst { it.startsWith("rainspeed=") }
@@ -46,9 +49,9 @@ class EmulatedConsoleTest {
         assertTrue(console.linkDropped())
         assertEquals(listOf("ledrest=0"), console.handle("get ledrest"))
         val older = EmulatedConsole(ledColour = false).handle("dump")
-        assertEquals("2.1.1 and earlier: none of it", 7 + 43 + 1, older.size)
+        assertEquals("2.1.1 and earlier: none of it (and no soft release: the emulator has 2.1.4's)", 7 + 40 + 1, older.size)
         val noRest = EmulatedConsole(ledRest = false)
-        assertEquals("2.1.2: the colour without the rest", 8 + 47 + 1, noRest.handle("dump").size)
+        assertEquals("2.1.2: the colour without the rest", 8 + 44 + 1, noRest.handle("dump").size)
         assertEquals(listOf("  unknown command — type 'help'"), noRest.handle("ledrest 1"))
     }
 

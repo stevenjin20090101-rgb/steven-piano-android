@@ -113,6 +113,12 @@ data class PianoSetting(
     val asPercentOf255: Boolean = false,
     val times: Boolean = false,
     val note: String? = null,
+    /**
+     * Shown only while the piano lists it in its dump: soft release's three, which firmware 2.1.4 removed (Steven: its
+     * cushion was crashing the keys; every key-up is a plain cut now). A piano still on older firmware lists them, so
+     * there they stay, and soft release can be turned off.
+     */
+    val whenListed: Boolean = false,
 ) {
     /** The page the setting is on: its section's. */
     val page: PianoPage get() = section.page
@@ -266,9 +272,9 @@ object PianoSettings {
         PianoSetting("gap", "Repeat gap", TIMING, SettingKind.Stepper(0, 300), unit = "ms"),
         PianoSetting("hold", "Longest hold", TIMING, SettingKind.Stepper(50, 4000, step = 50), unit = "ms"),
         PianoSetting("restrike", "Re-strike held notes", TIMING, SettingKind.Stepper(0, 1000, step = 10, lowestOn = 40), unit = "ms", zero = "Off"),
-        PianoSetting("softrelease", "Soft release", RELEASE, SettingKind.Switch),
-        PianoSetting("releasepwm", "Release cushion", RELEASE, SettingKind.Slider(0f, 4095f)),
-        PianoSetting("releasems", "Release time", RELEASE, SettingKind.Stepper(0, 200), unit = "ms"),
+        PianoSetting("softrelease", "Soft release", RELEASE, SettingKind.Switch, whenListed = true),
+        PianoSetting("releasepwm", "Release cushion", RELEASE, SettingKind.Slider(0f, 4095f), whenListed = true),
+        PianoSetting("releasems", "Release time", RELEASE, SettingKind.Stepper(0, 200), unit = "ms", whenListed = true),
         PianoSetting("freq", "Drive frequency", DRIVE, SettingKind.Stepper(24, 1526, step = 10), unit = "Hz"),
         // LIGHTS AND SCREEN
         PianoSetting("leds", "Strip", STRIP, SettingKind.Switch),
@@ -313,6 +319,21 @@ object PianoSettings {
 
     /** What [section] shows, in order: its facts, its settings, and the rows that are not settings where they belong. */
     fun rows(section: PianoSection): List<PianoRow> = rowsBySection.getValue(section)
+
+    /**
+     * Whether [row] shows for [ready] (null: not read yet): every row but a [PianoSetting.whenListed] one the piano's dump
+     * doesn't list (firmware 2.1.4 removed soft release's three).
+     */
+    fun listed(row: PianoRow, ready: PianoState.Ready?): Boolean {
+        val setting = (row as? PianoRow.Control)?.setting ?: return true
+        return !setting.whenListed || ready?.values?.containsKey(setting.name) == true
+    }
+
+    /** The [PianoSetting.whenListed] settings [state] doesn't list: hidden from the pages and from search. */
+    fun unlisted(state: PianoState?): Set<String> {
+        val values = (state as? PianoState.Ready)?.values
+        return all.filter { it.whenListed && values?.containsKey(it.name) != true }.map { it.name }.toSet()
+    }
 
     /** The four feel presets, as the chip row of Feel's PRESETS. Each saves itself on the piano. */
     val presets: List<Preset> = listOf(

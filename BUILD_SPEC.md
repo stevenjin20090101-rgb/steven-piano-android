@@ -279,3 +279,11 @@ check's sweep too). `PianoSettingsRepository.rest()` is always a temporary write
 ## The release: 1.46 (versionCode 57)
 
 Between pieces the LED strip can glow solid in the album art's colour, then fade to the notes as a piece plays (needs piano firmware 2.1.3). The strip can follow each piece's album art or a colour you pick on the tablet, with smooth fades and an optional background glow (firmware 2.1.2). After a power fault the 24 V comes back to staying on between pieces once the safety check passes; the cool-down is 10 minutes and its popup can skip it with the kiosk PIN; and the key check is faster, about 26 s. Also in this update: less cloud traffic, proper waits when the cloud is down, and a notification fix.
+
+# After 1.46: firmware 2.1.4 removed soft release
+
+The Player Piano chat's 2.1.4 (Steven: the release cushion was crashing the keys) drops `softrelease`, `releasepwm` and
+`releasems` from `dump`; `get` answers `  unknown setting`, a write `  unknown — soft release was removed in 2.1.4 (every key-up
+is a plain cut)`. The three stay in the table with `whenListed = true`: `PianoSettings.listed` shows such a row only while the
+piano's dump lists it (an older piano can still turn soft release off), a section left empty shows no eyebrow (Release), and
+`PianoSettings.unlisted` keeps them out of settings search. The emulated piano speaks 2.1.4's.

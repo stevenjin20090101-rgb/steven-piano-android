@@ -43,15 +43,16 @@ class PianoSettingsTableTest {
     }
 
     @Test
-    fun `every setting in the table is in the spec's dump list`() {
+    fun `every setting in the table is in the spec's dump list, but soft release's, which 2_1_4 removed`() {
         assertTrue("the dump list parsed", spec.size > 40)
-        val missing = PianoSettings.all.map { it.name }.filter { it !in spec }
+        val missing = PianoSettings.all.filterNot { it.whenListed }.map { it.name }.filter { it !in spec }
         assertEquals("not in BLE_SETTINGS.md's dump list", emptyList<String>(), missing)
+        assertEquals("shown only while a piano lists them", listOf("softrelease", "releasepwm", "releasems"), PianoSettings.all.filter { it.whenListed }.map { it.name })
     }
 
     @Test
     fun `every range in the table is the spec's range`() {
-        for (setting in PianoSettings.all) {
+        for (setting in PianoSettings.all.filterNot { it.whenListed && it.name !in spec }) {
             val said = spec.getValue(setting.name)
             val whole = Regex("""^(-?\d+)\.\.(-?\d+)$""").find(said)?.groupValues?.drop(1)?.map(String::toInt)
             val decimal = Regex("""^(\d+\.\d+)\.\.(\d+\.\d+)$""").find(said)?.groupValues?.drop(1)?.map(String::toFloat)
@@ -82,6 +83,21 @@ class PianoSettingsTableTest {
         // strip at rest (2.1.3) too, the tablet's own choice.
         val tunables = spec.keys.filterNot { it.startsWith("!") }
         assertEquals(listOf("keyviz"), tunables - PianoSettings.all.map { it.name }.toSet() - LedColour.names - LedRest.KEY)
+    }
+
+    @Test
+    fun `soft release's rows show only while the piano lists them (firmware 2_1_4 removed them)`() {
+        val soft = setOf("softrelease", "releasepwm", "releasems")
+        val rows = PianoSettings.rows(PianoSection.Release)
+        val old = PianoState.Ready(mapOf("softrelease" to "1", "releasepwm" to "1100", "releasems" to "22", "gap" to "30"), emptyMap())
+        val new = PianoState.Ready(mapOf("gap" to "30"), emptyMap())
+        assertTrue("2.1.3 and before: shown, so soft release can be turned off", rows.all { PianoSettings.listed(it, old) })
+        assertTrue("2.1.4: hidden", rows.none { PianoSettings.listed(it, new) })
+        assertEquals(emptySet<String>(), PianoSettings.unlisted(old))
+        assertEquals(soft, PianoSettings.unlisted(new))
+        assertTrue("every other row shows as ever", PianoSettings.all.filterNot { it.name in soft }.all { s ->
+            PianoSettings.listed(PianoRow.Control(s), new)
+        })
     }
 
     @Test

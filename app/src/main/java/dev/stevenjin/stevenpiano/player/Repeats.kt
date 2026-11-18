@@ -13,7 +13,8 @@ package dev.stevenjin.stevenpiano.player
  * Repeats that keep the rhythm (DESIGN.md › v1.16 — M44), part (c) of [Performance], always on for Steven Piano. T is the
  * re-strike time ([Performance.restrikeMs]); G, the release gap, is the longer of [MIN_RELEASE_GAP_MICROS] and T less
  * [RELEASE_SHORTER_MICROS]: a key must be up that long before it strikes again (the piano's `gap` 30 ms, its
- * `releasems` 22 and its 10 ms tick). For each key's notes in onset order:
+ * `releasems` 22 and its 10 ms tick; firmware 2.1.4 removed soft release, so a key now lifts at once and this spacing
+ * is only cautious). For each key's notes in onset order:
  *
  * 1. **Repeats faster than T**: the first is kept, then each that comes at least T after the last kept (a millisecond's
  *    rounding allowed): of a steady run that is the first and every n-th, n = ⌈T / period⌉. A kept note gains
