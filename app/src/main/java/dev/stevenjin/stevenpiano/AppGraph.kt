@@ -626,7 +626,6 @@ class AppGraph(private val app: Application) {
         appScope.launch { refreshBuiltIns() }
         appScope.launch { library.namesChanged.debounce(BUILT_INS_SETTLE_MS).collect { refreshBuiltIns() } }
         appScope.launch { library.genresChanged.debounce(GENRES_SETTLE_MS).collect { refreshGenrePlaylists() } }   // v1.37 — M73
-        libraryWiring.startSorting()   // M82: plays counted, the sorts' measures and world popularity in the background
         pianoSettings.start()
         ledColours.start()   // M80
         appScope.launch {
@@ -720,6 +719,7 @@ class AppGraph(private val app: Application) {
                 }
             }
         }
+        libraryWiring.startSorting()   // M82, last: plays counted, the sorts' measures and world popularity in the background
     }
 
     /**
