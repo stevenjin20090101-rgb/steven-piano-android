@@ -420,6 +420,20 @@ class StepsCalibrationTest {
         assertTrue(StepsCopy.uncalibrated(result.uncalibrated, result.tooLoud)!!.endsWith("The room was too loud for " + result.tooLoud.joinToString(", ") { dev.stevenjin.stevenpiano.ui.screens.keys.KeyboardGeometry.name(it) } + "."))
     }
 
+    @Test
+    fun `a loud strike's tail on an undamped key is waited out only to 20 dB under it, not to the room (M83b)`() = runTest {
+        val rig = setUp(keys = 89..89)
+        rig.steps.start()
+        advance(3 * 60_000)
+        assertTrue("it ran to its end: ${rig.steps.state.value.stopped}", rig.steps.state.value.result != null)
+        // After a loud strike (-40 dB and up) the room's in-band level is near 40 dB under it: waiting for that would take
+        // the 2 s cap. Its ring falls 20 dB in ln 10 × 0.4 s, about 0.9 s: the next strike comes about then.
+        val struck = rig.piano.struck.filter { it.first == 89 }
+        val afterLoud = struck.zipWithNext().filter { (a, _) -> (loudness(89, a.second) ?: -120.0) >= -40.0 }.map { (a, b) -> b.third - a.third }
+        assertTrue("loud strikes were made", afterLoud.size >= 5)
+        assertTrue("waited about 0.9 s, never to the cap: $afterLoud", afterLoud.all { it in 700L..1_600L })
+    }
+
     private companion object {
         val KEYS = 60..63
         const val FRAME_MS = 100L

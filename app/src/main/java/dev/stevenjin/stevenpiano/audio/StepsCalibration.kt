@@ -75,8 +75,8 @@ data class StepsState(
  *   (the firmware allows one every 300 ms); on "too soon" it waits and sends it again. M83b: each strike is heard in its
  *   key's bands, 20 to 100 ms after the reply ([StepsTake]), so a click alone is not a strike; and on an undamped top key
  *   ([UNDAMPED_FROM] up, which rings on after release) the next strike waits for its band to die back near the room's
- *   there, [RING_CAP_MS] at most. About 10 minutes for the damped keys, up to about 19 in all when every top key's ring
- *   is waited out to the cap (the emulator's; the piano will tell).
+ *   there or 20 dB under the last strike, [RING_CAP_MS] at most. About 12 to 13 minutes in all on the emulator (its top keys' strikes about 0.7 s
+ *   apart); the piano will tell.
  * - **Writing only at the end**: every key done, the uncalibrated keys' old rows cleared, one `steptable` per calibrated
  *   key, then `velsteps N` (the longest row), `fullpower 0` and `save`, each answered before the next; then the piano is
  *   read again. Stopped before, nothing is written.
@@ -369,8 +369,9 @@ class StepsCalibration(
 
     /**
      * M83b: an undamped key ([UNDAMPED_FROM] up) rings on after release, so before its next strike its band must have died
-     * back within [NEAR_ROOM_DB] of the room's there (in a stretch heard after the last strike's window), or [RING_CAP_MS]
-     * have passed since that strike's reply. False when it ended meanwhile.
+     * back (in a stretch heard after the last strike's window) within [NEAR_ROOM_DB] of the room's there, or [UNDER_LAST_DB]
+     * under the last strike's measured level, whichever comes first: near the floor that is still the room, after a loud
+     * strike it is short. [RING_CAP_MS] after that strike's reply at most. False when it ended meanwhile.
      */
     private suspend fun ringDown(take: StepsTake, key: Int): Boolean {
         val last = lastRepliedAt ?: return true
@@ -379,7 +380,10 @@ class StepsCalibration(
         val cap = last + RING_CAP_MS * NANOS_PER_MS
         while (nanos() < cap) {
             val now = take.bandNow(key)
-            if (now != null && now.second >= fresh && now.first <= room + NEAR_ROOM_DB) return true
+            // The last strike's own level, once measured (until then, the room's rule alone).
+            val struck = if (take.unmeasured() == 0) take.levels().lastOrNull()?.takeIf { it.key == key }?.db else null
+            val target = maxOf(room + NEAR_ROOM_DB, struck?.let { it - UNDER_LAST_DB } ?: Double.NEGATIVE_INFINITY)
+            if (now != null && now.second >= fresh && now.first <= target) return true
             if (!running) return false
             interruption()?.let {
                 end(it)
@@ -468,7 +472,7 @@ class StepsCalibration(
         val first = firstStrikeAt
         val pace = if (first != null && strikes >= PACE_AFTER) (nanos() - first) / NANOS_PER_MS / (strikes - 1).coerceAtLeast(1) else STRIKE_EVERY_MS + PACE_SLACK_MS
         val left = (total - index - 1).toLong() * PER_KEY + (PER_KEY - struck).coerceAtLeast(0)
-        // M83b: the undamped keys still to come wait for their rings, about 1.4 s a strike (the emulator's, near the cap).
+        // M83b: the undamped keys still to come wait for their rings, about 0.4 s more a strike (the emulator's run).
         val undamped = keys.drop(index).count { it >= UNDAMPED_FROM }.toLong() * PER_KEY
         return left * pace + undamped * UNDAMPED_EXTRA_MS + WRITE_MS
     }
@@ -534,8 +538,9 @@ class StepsCalibration(
          */
         const val UNDAMPED_FROM = 89
         const val NEAR_ROOM_DB = 3.0
+        const val UNDER_LAST_DB = 20.0
         const val RING_CAP_MS = 2_000L
-        const val UNDAMPED_EXTRA_MS = 1_400L
+        const val UNDAMPED_EXTRA_MS = 400L
 
         /** About how long the writing takes, for the time left. */
         const val WRITE_MS = 5_000L

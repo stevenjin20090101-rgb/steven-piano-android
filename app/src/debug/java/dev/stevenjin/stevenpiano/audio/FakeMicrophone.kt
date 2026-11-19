@@ -175,8 +175,11 @@ class FakeMicrophone(
         private const val LATENCY_NANOS = 8_000_000L
         private const val TONE_NANOS = 600_000_000L
 
-        /** M83b: an undamped top key rings on, down by e every 0.5 s, for 3.5 s; each strike's click, 3 ms at about −20 dBFS. */
-        private const val UNDAMPED_DECAY_SECONDS = 0.5
+        /**
+         * M83b: an undamped top key rings on, down by e every 0.25 s (60 dB in about 1.7 s, as a short treble string), for
+         * 3.5 s; each strike's click, 3 ms at about −20 dBFS.
+         */
+        private const val UNDAMPED_DECAY_SECONDS = 0.25
         private const val UNDAMPED_NANOS = 3_500_000_000L
         private const val CLICK_DELAY_NANOS = 2_000_000L
         private const val CLICK_NANOS = 3_000_000L
