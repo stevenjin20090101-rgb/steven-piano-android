@@ -127,7 +127,8 @@ object LoudnessSteps {
             return if (said) Reply.Done else Reply.Other(text)
         }
         return when (line) {
-            FULL_POWER_OFF -> if (text.startsWith("fullpower = OFF")) Reply.Done else Reply.Other(text)
+            // BLE_SETTINGS.md › "Distinct loudness steps" quotes it (since 2026-11-18): word for word.
+            FULL_POWER_OFF -> if (text == FULL_POWER_OFF_REPLY) Reply.Done else Reply.Other(text)
             SAVE -> if (text == SAVED) Reply.Done else Reply.Other(text)
             else -> Reply.Other(text)
         }
@@ -145,6 +146,7 @@ object LoudnessSteps {
     private const val TOO_SOON = "calstrike refused: too soon (one every 300 ms)"
     private const val SETTINGS_SAVE = "[settings] save"
     private const val SAVED = "[settings] saved to NVS"
+    private const val FULL_POWER_OFF_REPLY = "fullpower = OFF — velocity-mapped PWM with min/max/velmult."
 
     private val STRIKE = Regex("""^calstrike (\d{1,3}) (\d{1,4})$""")
     private val ROW = Regex("""^steptable (\d{1,3})( \d{1,4}){2,8}$""")

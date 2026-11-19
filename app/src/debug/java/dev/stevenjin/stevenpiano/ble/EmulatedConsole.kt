@@ -231,7 +231,12 @@ class EmulatedConsole(
             Range.Switch -> {
                 val on = (argument.toIntOrNull() ?: 0) != 0   // the firmware's atoi: anything else reads as 0
                 values[name] = if (on) "1" else "0"
-                listOf("  $name = ${if (on) "ON" else "OFF"}")
+                when {
+                    // M83b: Full power's replies word for word (BLE_SETTINGS.md › "Distinct loudness steps" quotes them).
+                    name == "fullpower" && on -> listOf("  fullpower = ON — every NoteOn drives FULL_ON. Max force, no hum, no velocity.")
+                    name == "fullpower" -> listOf("  fullpower = OFF — velocity-mapped PWM with min/max/velmult.")
+                    else -> listOf("  $name = ${if (on) "ON" else "OFF"}")
+                }
             }
             is Range.Whole -> {
                 val v = argument.toIntOrNull() ?: 0

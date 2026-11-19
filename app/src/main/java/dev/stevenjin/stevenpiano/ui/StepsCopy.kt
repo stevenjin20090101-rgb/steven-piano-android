@@ -41,7 +41,7 @@ object StepsCopy {
     // ---- The confirm --------------------------------------------------------------------------------------------------
     const val CONFIRM_TITLE = "Find the loudness steps?"
     const val CONFIRM_TEXT =
-        "It needs a quiet room and takes about 10 minutes. The piano strikes every key many times, softly to hard, while " +
+        "It needs a quiet room and takes about 12 minutes. The piano strikes every key many times, softly to hard, while " +
             "the tablet listens. Then each key gets its own steps, and Full power goes off."
     const val START = "Start"
     const val NOT_NOW = "Not now"
@@ -74,12 +74,19 @@ object StepsCopy {
     fun summary(result: StepsResult): String =
         result.counts.entries.sortedByDescending { it.key }.joinToString(" · ") { (steps, keys) -> "${keys(keys)}: $steps steps".replace(' ', NO_BREAK) }
 
-    /** "Not calibrated: C1, F♯7. They spread their steps over the floor and the ceiling." */
-    fun uncalibrated(keys: List<Int>): String? {
+    /**
+     * "Not calibrated: C1, F♯7. They spread their steps between the floor and the ceiling." and (M83b) which of them the
+     * room was too loud for: "The room was too loud for F♯7."
+     */
+    fun uncalibrated(keys: List<Int>, tooLoud: List<Int> = emptyList()): String? {
         if (keys.isEmpty()) return null
-        return "Not calibrated: " + keys.joinToString(", ") { KeyboardGeometry.name(it) } + ". " +
-            (if (keys.size == 1) "It spreads its" else "They spread their") + " steps between the floor and the ceiling."
+        val loud = tooLoud.filter { it in keys }
+        return "Not calibrated: " + names(keys) + ". " +
+            (if (keys.size == 1) "It spreads its" else "They spread their") + " steps between the floor and the ceiling." +
+            (if (loud.isEmpty()) "" else " The room was too loud for " + names(loud) + ".")
     }
+
+    private fun names(keys: List<Int>): String = keys.joinToString(", ") { KeyboardGeometry.name(it) }
 
     /** Stopped while writing: [written] keys had changed already, and Full power had gone off ([fullPowerOff]) or not. */
     fun partly(written: Int, fullPowerOff: Boolean): String =

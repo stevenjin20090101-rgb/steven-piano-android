@@ -627,7 +627,7 @@ class PianoSettingsRepositoryTest {
     @Test
     fun `fullpower 0 from the calibration is recorded as chosen off, and nothing turns Full power back on (M83)`() = runTest {
         val repo = connected()
-        assertEquals("fullpower = OFF", repo.converse("fullpower 0"))
+        assertEquals("fullpower = OFF — velocity-mapped PWM with min/max/velmult.", repo.converse("fullpower 0"))
         assertEquals("recorded as the guard's choice", listOf(false), choices)
         repo.reread()
         settle()
