@@ -269,8 +269,8 @@ on the tablet*). Made by Steven Jin. Version 1.47.
   firmware just says it doesn't offer them yet). **Sound and touch**: the Soft,
   Cinematic, Expressive and Snappy presets, *Full power* and *Piano volume*; from 1.48, with piano firmware 2.1.5,
   **Loudness steps** (Steven: "distinct notes of soft and hard"): how many keys are calibrated, **Find the loudness steps**
-  (the kiosk PIN, then a confirm; in a quiet room, about 10 minutes, the piano strikes every key softly to hard while the
-  tablet listens and picks each key's steps at least 4 dB apart, up to 8; stopped partway, nothing changes; at the end it
+  (the kiosk PIN, then a confirm; in a quiet room, about 12 minutes, the piano strikes every key softly to hard while the
+  tablet listens in that key's own pitch, so a solenoid's click alone never counts, and picks each key's steps at least 4 dB apart, up to 8; stopped partway, nothing changes; at the end it
   writes them, turns Full power off and saves) and **Steps** (Smooth, or 2 to 8). After it, Full power is off, the stock:
   switched on, every note strikes at full strength and overrides the steps, and presets and the volume never change it; under
   **Fine tuning** (folded until you open it) the velocity curve, the strike floors

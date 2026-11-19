@@ -327,3 +327,9 @@ The rail wants `RailKeeper.STEPS`, watched as a piece is (`pieceNow`), each `cal
 Once `fullpower 0` is confirmed the repository records Full Power as chosen off, so presets (Snappy) are followed by `fullpower 0`
 and `save`. The emulated piano speaks 2.1.5 with a synthetic ear (`EmulatedStrikes`). Unknown until the real piano: the
 too-loud-room threshold (−40 dBFS), whether a solenoid's click clears the room, the undamped top keys' floors.
+
+**M83b** (the firmware chat's advice): each strike is measured in its key's bands only (`audio/KeyBands.kt`: the fundamental and
+harmonics 2–4, ±1 semitone, as the school piano is out of tune), 20–100 ms after the reply, capped at twice the window's last
+40 ms, so a click alone reads as the room. Undamped keys (F6 up) wait, before the next level, until their band is within 3 dB of
+the room's or 20 dB under the last strike, 2 s at most. The room is measured per key in the same bands: a key that never clears
+it by 10 dB is "the room was too loud for …"; −40 dBFS broadband stays as the outer stop. About 12.6 minutes on the emulator.
