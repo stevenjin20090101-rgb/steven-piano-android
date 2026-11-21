@@ -82,7 +82,8 @@ class PianoSettingsTableTest {
         // M80: the strip's colour (firmware 2.1.2) has its own rows, outside the table, so the panel never offers it; M81's
         // strip at rest (2.1.3) too, the tablet's own choice.
         val tunables = spec.keys.filterNot { it.startsWith("!") }
-        assertEquals(listOf("keyviz"), tunables - PianoSettings.all.map { it.name }.toSet() - LedColour.names - LedRest.KEY)
+        // M85 (2.1.6): `boardaddr`, the boards' addresses, has its own tick rows under the power boards, not a table row.
+        assertEquals(listOf("keyviz"), tunables - PianoSettings.all.map { it.name }.toSet() - LedColour.names - LedRest.KEY - BoardAddress.KEY)
     }
 
     @Test
