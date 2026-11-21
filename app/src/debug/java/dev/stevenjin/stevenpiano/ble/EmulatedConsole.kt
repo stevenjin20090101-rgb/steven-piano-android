@@ -187,12 +187,19 @@ class EmulatedConsole(
         val address = if (parts[1].equals("default", true)) {
             BOARD_BASE + board
         } else {
-            parts[1].removePrefix("0x").removePrefix("0X").toIntOrNull(16)?.takeIf { it in 0x40..0x77 } ?: return usage
+            parts[1].removePrefix("0x").removePrefix("0X").toIntOrNull(16) ?: return usage
         }
-        if (address in RESERVED) return listOf("  boardaddr refused: 0x%02X is reserved".format(address))
-        if ((0 until BOARD_COUNT).any { it != board && boardAddresses[it] == address }) {
-            return listOf("  boardaddr refused: 0x%02X is another board's".format(address))
+        // 2.1.6's refusals word for word (BLE_SETTINGS.md › "A board at another address"); a board's own default gets no pass.
+        val refusal = when {
+            address in 0x78..0x7F -> "0x78..0x7F are reserved on the I2C bus"
+            address !in 0x40..0x77 -> "a power board answers at 0x40..0x77 only"
+            address == 0x70 -> "0x70 is All Call (every board answers it)"
+            address == 0x71 || address == 0x72 || address == 0x74 -> "0x71, 0x72 and 0x74 are the boards' group addresses"
+            address == 0x47 -> "that is the pedal board's address"
+            else -> (0 until BOARD_COUNT).firstOrNull { it != board && boardAddresses[it] == address }
+                ?.let { "board $it already answers at 0x%02X".format(address) }
         }
+        if (refusal != null) return listOf("  boardaddr refused: $refusal")
         boardAddresses[board] = address
         val answers = realAddress(board) == address
         return listOf("  boardaddr $board = 0x%02X: ".format(address) + if (answers) "OK (it answers)" else "MISSING (nothing answers there)")
@@ -443,7 +450,6 @@ class EmulatedConsole(
         private const val STRAYS = "strays"
         private const val BOARD_COUNT = 7
         private const val BOARD_BASE = 0x40
-        private val RESERVED = setOf(0x47, 0x70, 0x71, 0x72, 0x74) + (0x78..0x7F)
 
         /** The distinct loudness steps' key and facts (M83, firmware 2.1.5), and its limits (config.h). */
         private const val VEL_STEPS = "velsteps"
