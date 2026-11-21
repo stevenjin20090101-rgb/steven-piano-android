@@ -1,9 +1,9 @@
 {
-  "versionCode": 58,
-  "versionName": "1.47",
-  "notes": "Nothing plays unless the power plug can cut the 24 V: if its relay may be stuck on, or it stops answering, Play and the other ways of switching the 24 V on are refused, with the reason on the screen, and a piece stops if the plug goes quiet while it plays. The stuck-relay check now waits for fresh readings, so a slow plug reading no longer raises a false alarm. Soft release's settings are hidden on piano firmware 2.1.4 and later, which removed it.",
-  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.47/steven-piano-1.47.apk",
-  "sha256": "accaefb6d9b037f5fc2cf7be4deeddcb680d5b23f35e0e38bababf9f4a64a906",
-  "sizeBytes": 14558477,
+  "versionCode": 59,
+  "versionName": "1.48",
+  "notes": "Sort the song list by Popular, Hardest, Most keys at once or Recently played, with a Disney section. Find the loudness steps: a 12-minute listening calibration that gives each key clearly different soft-to-loud steps (needs piano firmware 2.1.5). A power board whose address switch is stuck can be ticked to work at its other address, on that piano only (needs firmware 2.1.6).",
+  "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.48/steven-piano-1.48.apk",
+  "sha256": "1dc723c0b4e93ca3ba36156903098907d20c1142195d0f6837bd5c299f0e9932",
+  "sizeBytes": 14616991,
   "minSdk": 26
 }

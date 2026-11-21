@@ -531,7 +531,11 @@
     "versionCode": 59,
     "versionName": "1.48",
     "notes": "Sort the song list by Popular, Hardest, Most keys at once or Recently played, with a Disney section. Find the loudness steps: a 12-minute listening calibration that gives each key clearly different soft-to-loud steps (needs piano firmware 2.1.5). A power board whose address switch is stuck can be ticked to work at its other address, on that piano only (needs firmware 2.1.6).",
+    "apkUrl": "https://github.com/stevenjin20090101-rgb/steven-piano-android/releases/download/v1.48/steven-piano-1.48.apk",
+    "sha256": "1dc723c0b4e93ca3ba36156903098907d20c1142195d0f6837bd5c299f0e9932",
+    "sizeBytes": 14616991,
+    "minSdk": 26,
     "tag": "v1.48",
-    "draft": true
+    "publishedAt": "2026-11-21"
   }
 ]
