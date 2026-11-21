@@ -344,3 +344,7 @@ missing, exactly one stray the piano would take (`usable`), none already a board
 address (one stuck switch; zero bits: the switch mended, offered back with `default`). `ui/screens/piano/BoardAddressRows.kt`
 draws the ticks under the power boards; `PianoSettingsRepository.converse` carries the `boardaddr` lines (`BoardAddress.ours`).
 The emulated piano speaks 2.1.6; `adb shell setprop debug.stevenpiano.stuckboard 5:4d` makes a stuck C6.
+
+## The release: 1.48 (versionCode 59)
+
+Sort the song list by Popular, Hardest, Most keys at once or Recently played, with a Disney section. Find the loudness steps: a 12-minute listening calibration that gives each key clearly different soft-to-loud steps (needs piano firmware 2.1.5). A power board whose address switch is stuck can be ticked to work at its other address, on that piano only (needs firmware 2.1.6).

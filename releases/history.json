@@ -526,5 +526,12 @@
     "minSdk": 26,
     "tag": "v1.47",
     "publishedAt": "2026-11-18"
+  },
+  {
+    "versionCode": 59,
+    "versionName": "1.48",
+    "notes": "Sort the song list by Popular, Hardest, Most keys at once or Recently played, with a Disney section. Find the loudness steps: a 12-minute listening calibration that gives each key clearly different soft-to-loud steps (needs piano firmware 2.1.5). A power board whose address switch is stuck can be ticked to work at its other address, on that piano only (needs firmware 2.1.6).",
+    "tag": "v1.48",
+    "draft": true
   }
 ]
