@@ -289,7 +289,10 @@ on the tablet*). Made by Steven Jin. Version 1.47.
   long the strip fades to a new colour; also
   the note glow, fade speed and a *Test LED* that lights one key's LED to line the strip up; then
   the piano's own screen. **Pedal**: on, half-pedalling, up and down positions.
-  **Firmware and status**: the piano's firmware version, the power boards, I²C
+  **Firmware and status**: the piano's firmware version, the power boards (from 1.48, with piano firmware 2.1.6: when
+  one board is missing and exactly one unexpected address answers one switch away from it, a tick offers "C6 answers at
+  0x4D, not 0x45"; ticked, behind the kiosk PIN, the piano looks for that board there from then on, kept in that piano
+  alone, through updates and a reset; untick to put it back), I²C
   errors, uptime and the piano's own status report (*Read status*). Most rows
   carry one line saying what they do. The app reads every value when it connects,
   sends a change as you make it and shows what the piano reports back; the piano

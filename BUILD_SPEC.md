@@ -333,3 +333,14 @@ harmonics 2–4, ±1 semitone, as the school piano is out of tune), 20–100 ms 
 40 ms, so a click alone reads as the room. Undamped keys (F6 up) wait, before the next level, until their band is within 3 dB of
 the room's or 20 dB under the last strike, 2 s at most. The room is measured per key in the same bands: a key that never clears
 it by 10 dB is "the room was too loud for …"; −40 dBFS broadband stays as the outer stop. About 12.6 minutes on the emulator.
+
+# v1.48 — M85: a power board at another address on this piano (firmware 2.1.6)
+
+The new piano's C6 board has a dead A3 switch and answers at 0x4D (Steven chose a firmware setting over a solder bridge).
+Firmware 2.1.6: `boardaddr <b> <hex>|default` (trusted, coils verified off, saved in that controller's NVS, kept through OTA
+and a factory reset), `!boardaddrproto=1`, `!strays` (addresses that answer and are no board, the pedal node or All Call),
+`boardaddr=` the dump's last row. `piano/BoardAddress.kt` holds the rules: `suggest` offers a board only with exactly one
+missing, exactly one stray the piano would take (`usable`), none already a board's, and at most one bit from the board's own
+address (one stuck switch; zero bits: the switch mended, offered back with `default`). `ui/screens/piano/BoardAddressRows.kt`
+draws the ticks under the power boards; `PianoSettingsRepository.converse` carries the `boardaddr` lines (`BoardAddress.ours`).
+The emulated piano speaks 2.1.6; `adb shell setprop debug.stevenpiano.stuckboard 5:4d` makes a stuck C6.
