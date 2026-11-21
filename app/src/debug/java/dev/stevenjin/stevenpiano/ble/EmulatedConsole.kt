@@ -39,6 +39,8 @@ class EmulatedConsole(
     var ledColour: Boolean = true,
     var ledRest: Boolean = true,
     var steps: Boolean = true,
+    /** M85, firmware 2.1.6: `boardaddr` and its facts. */
+    var boardAddr: Boolean = true,
     /** The piano's millis() for `calstrike`'s 300 ms. */
     private val now: () -> Long = { System.nanoTime() / NANOS_PER_MS },
 ) {
@@ -50,6 +52,28 @@ class EmulatedConsole(
      * is up; null, the default, while no fake plug feeds it, and `!boards` is the facts' own, as before.
      */
     var railBoards: () -> String? = { null }
+
+    /**
+     * M85: each board's address as the piano looks for it (`boardaddr`, kept by the piano), and where a board really
+     * answers when its switches say otherwise ([stuck]: board to address, e.g. 5 to 0x4D for the new piano's dead A3).
+     */
+    private val boardAddresses = IntArray(BOARD_COUNT) { BOARD_BASE + it }
+    var stuck: Map<Int, Int> = emptyMap()
+
+    /** Where board [board] really answers. */
+    private fun realAddress(board: Int): Int = stuck[board] ?: (BOARD_BASE + board)
+
+    /** `!boards` with M85's moves: a board answers where the piano looks only if that's where it really is. */
+    private fun movedBoards(base: String): String {
+        if (stuck.isEmpty()) return base
+        return base.split(',').mapIndexed { board, state ->
+            if (board < BOARD_COUNT && boardAddresses[board] != realAddress(board)) "MISSING" else state
+        }.joinToString(",")
+    }
+
+    /** `!strays`: the addresses a board really answers at where the piano doesn't look. */
+    private fun strays(): String =
+        (0 until BOARD_COUNT).map(::realAddress).filter { it !in boardAddresses }.joinToString(",") { "%02x".format(it) }
 
     /** Whether a firmware update runs now (M83: `calstrike`, which drives a coil, is refused meanwhile). */
     var updating: () -> Boolean = { false }
@@ -97,6 +121,7 @@ class EmulatedConsole(
             name == "ledtest" -> ledTest(argument)
             name == "testmin" || name == "testmax" -> strikeTest(name == "testmax", argument)
             name == "note" -> emptyList()
+            name == BOARD_ADDR && boardAddr -> boardAddr(argument)   // M85, firmware 2.1.6
             name == "calstrike" && stepsHere() -> calStrike(command)   // M83, firmware 2.1.5
             name == "steptable" && stepsHere() -> stepTable(command)
             name in SOFT_RELEASE && argument.isNotEmpty() -> listOf("  unknown — soft release was removed in 2.1.4 (every key-up is a plain cut)")
@@ -108,9 +133,12 @@ class EmulatedConsole(
 
     /** The value [name] holds, as `dump` writes it; facts with their "!" (the lock's too). */
     fun valueOf(name: String): String? {
+        if (name == BOARD_ADDR) return if (boardAddr) boardAddresses.joinToString(",") { "%02x".format(it) } else null   // M85
         if (!name.startsWith("!")) return values[name]?.takeIf { has(name) }
         val fact = name.removePrefix("!")
-        if (fact == BOARDS) railBoards()?.let { return it }
+        if (fact == BOARDS) return movedBoards(railBoards() ?: facts[BOARDS] ?: "")
+        if (fact == BOARD_ADDR_PROTO && boardAddr) return "1"   // M85
+        if (fact == STRAYS && boardAddr) return strays()
         if (fact == LED_COLOR_PROTO && ledColour) return "1"
         if (fact == LED_REST_PROTO && restsHere()) return "1"
         if (fact == STEPS_PROTO && stepsHere()) return "1"   // M83
@@ -119,12 +147,14 @@ class EmulatedConsole(
     }
 
     private fun dump(): List<String> =
-        facts.map { (name, value) -> "!$name=" + (if (name == BOARDS) railBoards() ?: value else value) } +
+        facts.map { (name, value) -> "!$name=" + (if (name == BOARDS) valueOf("!$BOARDS") ?: value else value) } +
             lock?.facts().orEmpty().map { (name, value) -> "!$name=$value" } +
             (if (ledColour) listOf("!$LED_COLOR_PROTO=1") else emptyList()) +
             (if (restsHere()) listOf("!$LED_REST_PROTO=1") else emptyList()) +
             (if (stepsHere()) listOf("!$STEPS_PROTO=1", "!$STEP_KEYS=${rows.size}") else emptyList()) +
-            values.filterKeys(::has).map { (name, value) -> "$name=$value" } + "end"
+            (if (boardAddr) listOf("!$BOARD_ADDR_PROTO=1", "!$STRAYS=${strays()}") else emptyList()) +
+            values.filterKeys(::has).map { (name, value) -> "$name=$value" } +
+            (if (boardAddr) listOf("$BOARD_ADDR=${valueOf(BOARD_ADDR)}") else emptyList()) + "end"
 
     /** Whether this piano has [name]: the LED colour's keys from 2.1.2 ([ledColour]), `ledrest` from 2.1.3 ([ledRest]). */
     private fun has(name: String): Boolean = when (name) {
@@ -142,6 +172,31 @@ class EmulatedConsole(
 
     /** The keys holding a calibration row and their PWMs (M83), for the emulator's log. */
     fun stepRows(): Map<Int, List<Int>> = rows.toMap()
+
+    /**
+     * `boardaddr <board> <hex>|default` (M85) as 2.1.6 answers it: `usage:` unless a board 0..6 and an address 40..77 or
+     * `default`; refused while an update runs, on a clash with another board, or on a reserved address; else taken and
+     * kept, answering whether a board is there. (The emulator has no coils on to refuse for.)
+     */
+    private fun boardAddr(argument: String): List<String> {
+        val usage = listOf("  usage: boardaddr [<board 0..6> <hex 40..77>|default]")
+        val parts = argument.split(' ').filter { it.isNotEmpty() }
+        val board = parts.getOrNull(0)?.toIntOrNull()?.takeIf { it in 0 until BOARD_COUNT } ?: return usage
+        if (parts.size != 2) return usage
+        if (updating()) return listOf("  boardaddr refused: updating firmware")
+        val address = if (parts[1].equals("default", true)) {
+            BOARD_BASE + board
+        } else {
+            parts[1].removePrefix("0x").removePrefix("0X").toIntOrNull(16)?.takeIf { it in 0x40..0x77 } ?: return usage
+        }
+        if (address in RESERVED) return listOf("  boardaddr refused: 0x%02X is reserved".format(address))
+        if ((0 until BOARD_COUNT).any { it != board && boardAddresses[it] == address }) {
+            return listOf("  boardaddr refused: 0x%02X is another board's".format(address))
+        }
+        boardAddresses[board] = address
+        val answers = realAddress(board) == address
+        return listOf("  boardaddr $board = 0x%02X: ".format(address) + if (answers) "OK (it answers)" else "MISSING (nothing answers there)")
+    }
 
     /**
      * `calstrike <note> <pwm>` (M83) as 2.1.5 answers it: refused while an update runs; `usage:` unless exactly a note
@@ -381,6 +436,14 @@ class EmulatedConsole(
         /** The strip at rest's key and fact (M81, firmware 2.1.3). */
         private const val LED_REST = "ledrest"
         private const val LED_REST_PROTO = "ledrestproto"
+
+        /** M85, firmware 2.1.6: the boards' addresses, their fact, and what answers where no board is looked for. */
+        private const val BOARD_ADDR = "boardaddr"
+        private const val BOARD_ADDR_PROTO = "boardaddrproto"
+        private const val STRAYS = "strays"
+        private const val BOARD_COUNT = 7
+        private const val BOARD_BASE = 0x40
+        private val RESERVED = setOf(0x47, 0x70, 0x71, 0x72, 0x74) + (0x78..0x7F)
 
         /** The distinct loudness steps' key and facts (M83, firmware 2.1.5), and its limits (config.h). */
         private const val VEL_STEPS = "velsteps"

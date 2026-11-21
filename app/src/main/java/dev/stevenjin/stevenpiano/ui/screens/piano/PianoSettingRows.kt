@@ -460,6 +460,7 @@ private fun PianoFact(name: String, label: String, ready: PianoState.Ready?) {
     if (name == "boards") {
         // v1.26 — M62: with the power plug keeping the 24 V off, the boards that don't answer are unpowered, not missing.
         PowerBoards(PianoDiag(if (value == null) emptyMap() else mapOf(name to value)).boards, title = label, off = rememberRailOff())
+        BoardAddressRows(ready)   // M85: a board moved to another address on this piano (firmware 2.1.6)
     } else {
         FactRow(SystemCopy.Fact(label, factText(name, value)))
     }

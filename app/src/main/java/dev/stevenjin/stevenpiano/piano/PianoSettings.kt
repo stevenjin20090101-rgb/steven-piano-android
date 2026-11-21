@@ -408,7 +408,7 @@ object PianoSettings {
     }
 
     /** Facts that change while the piano runs: read again with the status. */
-    val liveFacts: List<String> = listOf("boards", "i2cfails", "pedalboard", "uptime")
+    val liveFacts: List<String> = listOf("boards", "i2cfails", "pedalboard", "uptime", BoardAddress.STRAYS)
 
     /**
      * The facts the web panel's System page reads (v1.18 — M46; `firmware/docs/BLE_DIAG.md`), in the order its `diag`

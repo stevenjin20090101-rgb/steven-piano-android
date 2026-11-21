@@ -81,6 +81,13 @@ class EmulatedPianoLink(
     private val emulated = EmulatedConsole().apply {
         railBoards = { EmulatedPlug.boards() }   // v1.26 — M60: the 24 V on the fake plug
         updating = { (ota as? EmulatedOta)?.sessionOpen == true }   // M83: no calstrike during an update
+        // M85: `adb shell setprop debug.stevenpiano.stuckboard 5:4d` before the app starts: board 5 answers only at 0x4D,
+        // as the new piano's C6 with its dead A3 switch.
+        stuck = SystemProperty.read(STUCK_BOARD_PROPERTY).split(':').let { parts ->
+            val board = parts.getOrNull(0)?.trim()?.toIntOrNull()
+            val address = parts.getOrNull(1)?.trim()?.removePrefix("0x")?.toIntOrNull(16)
+            if (board != null && address != null) mapOf(board to address) else emptyMap()
+        }
     }
     private val replies = MutableSharedFlow<String>(extraBufferCapacity = REPLY_BUFFER_LINES)
 
@@ -286,6 +293,9 @@ class EmulatedPianoLink(
     }
 
     companion object {
+        /** M85: a board answering at another address than its own, "board:hex" (e.g. "5:4d"). */
+        private const val STUCK_BOARD_PROPERTY = "debug.stevenpiano.stuckboard"
+
         private const val TAG = "PianoLink"
         private const val LOGGED_MTU = 255
         private const val SCAN_MS = 1_500L

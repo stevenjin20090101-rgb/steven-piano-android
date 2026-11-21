@@ -334,8 +334,9 @@ class PianoSettingsRepository(
 
     /**
      * One line of the loudness steps' calibration (M83; BLE_SETTINGS.md › "Distinct loudness steps"): [line], only one of
-     * its own ([LoudnessSteps.ours]: `calstrike`, `steptable`, `velsteps`, `fullpower 0`, `save`), sent now and its own reply
-     * awaited ([LoudnessSteps.answers]), trimmed: never a setting's error on the pages. Null when it wasn't sent (no
+     * its own ([LoudnessSteps.ours]: `calstrike`, `steptable`, `velsteps`, `fullpower 0`, `save`; M85: and
+     * [BoardAddress.ours]' `boardaddr` lines), sent now and its own reply awaited ([LoudnessSteps.answers],
+     * [BoardAddress.answers]), trimmed: never a setting's error on the pages. Null when it wasn't sent (no
      * console, before the dump, from a connection the piano doesn't let write), nothing came in [timeoutMs], or the
      * connection ended meanwhile (at once). When the
      * piano confirms `fullpower 0`, that is recorded as Full power chosen off (1.22's guard): after a calibration nothing
@@ -512,7 +513,7 @@ class PianoSettingsRepository(
          * line itself never names a setting's refusal on the pages ([lastCommand] stays).
          */
         fun converse(line: String): CompletableDeferred<String?>? {
-            if (!ready || !handshake.lock.phase.writable || !LoudnessSteps.ours(line)) {
+            if (!ready || !handshake.lock.phase.writable || !(LoudnessSteps.ours(line) || BoardAddress.ours(line))) {
                 log("Not sent: ${line.substringBefore(' ')}")
                 return null
             }
@@ -533,7 +534,8 @@ class PianoSettingsRepository(
         private fun stepsReplied(line: String): Boolean {
             val sent = stepsLine ?: return false
             val waiting = stepsReply ?: return false
-            if (!LoudnessSteps.answers(sent, line)) return false
+            val answers = if (BoardAddress.ours(sent)) BoardAddress.answers(sent, line) else LoudnessSteps.answers(sent, line)
+            if (!answers) return false
             stepsLine = null
             stepsReply = null
             val text = line.trim()

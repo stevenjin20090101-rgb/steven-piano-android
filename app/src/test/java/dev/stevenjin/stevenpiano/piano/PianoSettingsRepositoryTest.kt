@@ -409,7 +409,7 @@ class PianoSettingsRepositoryTest {
         repo.action(PianoAction.Status)
         runCurrent()
         assertTrue(repo.statusReading.value)
-        assertEquals(listOf("status", "get !boards", "get !i2cfails", "get !pedalboard", "get !uptime"), console.sent)
+        assertEquals(listOf("status", "get !boards", "get !i2cfails", "get !pedalboard", "get !uptime", "get !strays"), console.sent)   // M85: !strays too
         advanceTimeBy(299)
         runCurrent()
         assertTrue(repo.statusReading.value)
